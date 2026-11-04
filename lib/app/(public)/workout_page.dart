@@ -35,6 +35,14 @@ class _WorkoutPageState extends ConsumerState<WorkoutPage> {
   Duration _selectedSetTimerDuration = const Duration(minutes: 2); // Default value
   final Map<String, List<TextEditingController>> _accessoryRepsControllers = {}; // Accessory reps input per exercise
   final Map<String, List<TextEditingController>> _accessoryWeightControllers = {}; // Accessory weight input per exercise
+  // Expansion flags are session memory only: the saved workouts decide the
+  // initial state once and the user toggles them from there.
+  bool _mainLiftExpanded = false;
+  bool _accessorySectionExpanded = false;
+  final Map<String, bool> _accessoryExpanded = {}; // Accessory card expansion per exercise
+  // Sections only get their initial state after the first frame, so this flips
+  // once and never goes back.
+  bool _expansionSeeded = false;
 
   void _showNotesDialog(AppLocalizations localizations) {
     showDialog(
@@ -185,10 +193,17 @@ class _WorkoutPageState extends ConsumerState<WorkoutPage> {
       final preferences = ref.read(preferencesProvider);
       final week = preferences.cycleWeekData[widget.exercise]?['week'] ?? 1;
       final sets = preferences.percData['Semana $week']?.entries.toList() ?? [];
+      final workouts = ref.read(workoutProvider);
       setState(() {
         for (int i = 0; i < sets.length; i++) {
           _isCompleted[i] = false;
         }
+        // A section opens only when today already has a saved workout for it.
+        // That saved data is the only signal available this early, live input
+        // does not exist yet.
+        _mainLiftExpanded = _hasMainLiftWorkoutToday(workouts);
+        _accessorySectionExpanded = _hasAccessoryWorkoutToday(workouts);
+        _expansionSeeded = true;
       });
     });
   }
@@ -343,6 +358,31 @@ class _WorkoutPageState extends ConsumerState<WorkoutPage> {
     await updateCycleAndWeek(exercise, newCycle, newWeek);
   }
 
+  // DateUtils.isSameDay compares calendar days, which is what "today" means
+  // here; the codebase has no other "is today" helper.
+  bool _isToday(DateTime date) => DateUtils.isSameDay(date, DateTime.now());
+
+  // ExpansionTile reads initiallyExpanded only when it creates its state, so a
+  // section carries the seed flag in its key: it is rebuilt exactly once, on
+  // the frame the first-frame seed lands, and never again. The names keep the
+  // two sibling keys distinct.
+  Key _seedKey(String section) => ValueKey<String>('$section:$_expansionSeeded');
+
+  // This lift already logged today, so its section can start open.
+  bool _hasMainLiftWorkoutToday(List<WorkoutModel> workouts) {
+    return workouts.any((workout) =>
+        !workout.isAccessory &&
+        workout.exerciseName == widget.exercise &&
+        _isToday(workout.date));
+  }
+
+  // Any accessory row already logged today, so the accessory section can start
+  // open.
+  bool _hasAccessoryWorkoutToday(List<WorkoutModel> workouts) {
+    return workouts.any(
+        (workout) => workout.isAccessory && _isToday(workout.date));
+  }
+
   // Most recent accessory row saved under [name], used for the last-time
   // prefill shown inside the accessory section.
   WorkoutModel? _lastAccessoryWorkout(String name, List<WorkoutModel> workouts) {
@@ -367,6 +407,11 @@ class _WorkoutPageState extends ConsumerState<WorkoutPage> {
     if (_accessoryRepsControllers.containsKey(name)) {
       return;
     }
+    // Same once-only pass decides the card's initial state: it opens only when
+    // this exercise was already logged today. lastWorkout is the most recent
+    // saved row, so it being today's means today has one.
+    _accessoryExpanded[name] =
+        lastWorkout != null && _isToday(lastWorkout.date);
     final List<TextEditingController> repsControllers = [];
     final List<TextEditingController> weightControllers = [];
     final List<SetModel> lastSets = lastWorkout?.sets ?? [];
@@ -380,6 +425,16 @@ class _WorkoutPageState extends ConsumerState<WorkoutPage> {
     }
     _accessoryRepsControllers[name] = repsControllers;
     _accessoryWeightControllers[name] = weightControllers;
+  }
+
+  // One-line summary for the collapsed card: how many rows already hold reps.
+  // Deliberately the simple non-empty test, it only has to be readable, not to
+  // match what parseAccessorySets writes.
+  int _accessoryFilledRowCount(String name) {
+    final repsControllers = _accessoryRepsControllers[name] ?? [];
+    return repsControllers
+        .where((controller) => controller.text.trim().isNotEmpty)
+        .length;
   }
 
   void _addAccessorySet(String name) {
@@ -525,6 +580,12 @@ class _WorkoutPageState extends ConsumerState<WorkoutPage> {
       _accessoryRepsControllers[newName] = repsControllers;
       _accessoryWeightControllers[newName] = weightControllers;
     }
+    // The card also keeps its open/closed state across a rename; without this
+    // it would come back closed, since the new name has no flag yet.
+    final bool? wasExpanded = _accessoryExpanded.remove(oldName);
+    if (wasExpanded != null) {
+      _accessoryExpanded[newName] = wasExpanded;
+    }
   }
 
   // Deleting only removes the catalogue entry: logged history rows stay.
@@ -534,6 +595,7 @@ class _WorkoutPageState extends ConsumerState<WorkoutPage> {
         _accessoryRepsControllers.remove(name) ?? <TextEditingController>[];
     final List<TextEditingController> removedWeightsControllers =
         _accessoryWeightControllers.remove(name) ?? <TextEditingController>[];
+    _accessoryExpanded.remove(name);
     // Dispose after the frame, once the entry is gone from the tree.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       for (final controller in removedRepsControllers) {
@@ -628,6 +690,14 @@ class _WorkoutPageState extends ConsumerState<WorkoutPage> {
     });
 
     return ExpansionTile(
+      // Rebuilt once, when the first-frame seed lands; see [_seedKey].
+      key: _seedKey('accessorySection'),
+      initiallyExpanded: _accessorySectionExpanded,
+      onExpansionChanged: (bool expanded) {
+        setState(() {
+          _accessorySectionExpanded = expanded;
+        });
+      },
       title: Text(localizations.accessory),
       children: [
         for (final entry in entries)
@@ -655,111 +725,131 @@ class _WorkoutPageState extends ConsumerState<WorkoutPage> {
     final weightControllers = _accessoryWeightControllers[name] ?? [];
 
     return Card(
+      // Cards reorder when an exercise is last used on another lift day, so the
+      // identity is the name rather than the position in the list.
+      key: ValueKey<String>('accessory:$name'),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(10.0),
       ),
       elevation: 4.0,
       margin: const EdgeInsets.all(8.0),
-      child: Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+      // The header row stays visible and the body folds away, so a long
+      // catalogue stays scannable. Tapping the header toggles it.
+      child: ExpansionTile(
+        initiallyExpanded: _accessoryExpanded[name] ?? false,
+        onExpansionChanged: (bool expanded) {
+          setState(() {
+            _accessoryExpanded[name] = expanded;
+          });
+        },
+        shape: const Border(),
+        collapsedShape: const Border(),
+        expandedCrossAxisAlignment: CrossAxisAlignment.start,
+        tilePadding: const EdgeInsets.symmetric(horizontal: 8.0),
+        childrenPadding: const EdgeInsets.fromLTRB(8.0, 0.0, 8.0, 8.0),
+        title: Row(
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    name,
-                    style: Theme.of(context).textTheme.titleMedium,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+            Expanded(
+              child: Text(
+                name,
+                style: Theme.of(context).textTheme.titleMedium,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            PopupMenuButton<String>(
+              onSelected: (String value) {
+                if (value == 'rename') {
+                  _showRenameAccessoryDialog(name, localizations);
+                } else if (value == 'delete') {
+                  _deleteAccessory(name);
+                }
+              },
+              itemBuilder: (BuildContext context) =>
+                  <PopupMenuEntry<String>>[
+                PopupMenuItem<String>(
+                  value: 'rename',
+                  child: Text(localizations.accessoryRename),
                 ),
-                PopupMenuButton<String>(
-                  onSelected: (String value) {
-                    if (value == 'rename') {
-                      _showRenameAccessoryDialog(name, localizations);
-                    } else if (value == 'delete') {
-                      _deleteAccessory(name);
-                    }
-                  },
-                  itemBuilder: (BuildContext context) =>
-                      <PopupMenuEntry<String>>[
-                    PopupMenuItem<String>(
-                      value: 'rename',
-                      child: Text(localizations.accessoryRename),
-                    ),
-                    PopupMenuItem<String>(
-                      value: 'delete',
-                      child: Text(localizations.accessoryDelete),
-                    ),
-                  ],
+                PopupMenuItem<String>(
+                  value: 'delete',
+                  child: Text(localizations.accessoryDelete),
                 ),
               ],
             ),
-            if (lastWorkout != null)
-              Row(
+          ],
+        ),
+        // On screen collapsed or not: what this session already holds.
+        subtitle: Text(
+          '${localizations.set}: ${_accessoryFilledRowCount(name)}',
+          style: const TextStyle(fontSize: 12.0),
+        ),
+        children: [
+          if (lastWorkout != null)
+            Row(
+              children: [
+                const Icon(Icons.history, size: 16.0),
+                const SizedBox(width: 8.0),
+                Expanded(
+                  child: Text(
+                    '${localizations.accessoryLastUsed}: ${DateFormat('yyyy-MM-dd').format(lastWorkout.date)} - ${_formatAccessorySets(lastWorkout.sets)}',
+                    style: const TextStyle(fontSize: 12.0),
+                  ),
+                ),
+              ],
+            ),
+          const SizedBox(height: 8.0),
+          for (int i = 0; i < repsControllers.length; i++)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4.0),
+              child: Row(
                 children: [
-                  const Icon(Icons.history, size: 16.0),
+                  Expanded(
+                    child: TextFormField(
+                      controller: repsControllers[i],
+                      keyboardType: TextInputType.number,
+                      onChanged: (String value) {
+                        setState(() {});
+                      },
+                      decoration: InputDecoration(
+                        labelText: '${localizations.set} ${i + 1}',
+                        hintText: localizations.reps,
+                      ),
+                    ),
+                  ),
                   const SizedBox(width: 8.0),
                   Expanded(
-                    child: Text(
-                      '${localizations.accessoryLastUsed}: ${DateFormat('yyyy-MM-dd').format(lastWorkout.date)} - ${_formatAccessorySets(lastWorkout.sets)}',
-                      style: const TextStyle(fontSize: 12.0),
+                    child: TextFormField(
+                      controller: weightControllers[i],
+                      keyboardType: TextInputType.number,
+                      onChanged: (String value) {
+                        setState(() {});
+                      },
+                      decoration: InputDecoration(
+                        hintText: localizations.weight,
+                        suffixText:
+                            _accessoryWeightSuffix(weightControllers[i].text),
+                      ),
                     ),
+                  ),
+                  IconButton(
+                    iconSize: 16.0,
+                    icon: const Icon(Icons.remove),
+                    onPressed: repsControllers.length > 1
+                        ? () => _removeAccessorySet(name, i)
+                        : null,
                   ),
                 ],
               ),
-            const SizedBox(height: 8.0),
-            for (int i = 0; i < repsControllers.length; i++)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4.0),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TextFormField(
-                        controller: repsControllers[i],
-                        keyboardType: TextInputType.number,
-                        decoration: InputDecoration(
-                          labelText: '${localizations.set} ${i + 1}',
-                          hintText: localizations.reps,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8.0),
-                    Expanded(
-                      child: TextFormField(
-                        controller: weightControllers[i],
-                        keyboardType: TextInputType.number,
-                        onChanged: (String value) {
-                          setState(() {});
-                        },
-                        decoration: InputDecoration(
-                          hintText: localizations.weight,
-                          suffixText:
-                              _accessoryWeightSuffix(weightControllers[i].text),
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      iconSize: 16.0,
-                      icon: const Icon(Icons.remove),
-                      onPressed: repsControllers.length > 1
-                          ? () => _removeAccessorySet(name, i)
-                          : null,
-                    ),
-                  ],
-                ),
-              ),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                icon: const Icon(Icons.add),
-                label: Text(localizations.accessoryAddSet),
-                onPressed: () => _addAccessorySet(name),
-              ),
             ),
-          ],
-        ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              icon: const Icon(Icons.add),
+              label: Text(localizations.accessoryAddSet),
+              onPressed: () => _addAccessorySet(name),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -850,6 +940,15 @@ class _WorkoutPageState extends ConsumerState<WorkoutPage> {
               child: ListView(
                 children: [
                   ExpansionTile(
+                    // Rebuilt once, when the first-frame seed lands; see
+                    // [_seedKey]. Everything inside the tile is unchanged.
+                    key: _seedKey('mainLift'),
+                    initiallyExpanded: _mainLiftExpanded,
+                    onExpansionChanged: (bool expanded) {
+                      setState(() {
+                        _mainLiftExpanded = expanded;
+                      });
+                    },
                     title: Text(localizations.mainLift),
                     children: [
                       SingleChildScrollView(
