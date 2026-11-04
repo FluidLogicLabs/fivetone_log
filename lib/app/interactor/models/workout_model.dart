@@ -14,6 +14,7 @@ class WorkoutModel {
   final Duration timeSpent; // New field
   final int cycle; // New field
   final int week; // New field
+  final bool isAccessory; // New field
 
   const WorkoutModel({
     required this.id,
@@ -27,6 +28,7 @@ class WorkoutModel {
     required this.timeSpent, // New field
     required this.cycle, // New field
     required this.week, // New field
+    this.isAccessory = false, // New field
   });
 
   WorkoutModel copyWith({
@@ -41,6 +43,7 @@ class WorkoutModel {
     Duration? timeSpent, // New field
     int? cycle, // New field
     int? week, // New field
+    bool? isAccessory, // New field
   }) {
     return WorkoutModel(
       id: id ?? this.id,
@@ -54,6 +57,7 @@ class WorkoutModel {
       timeSpent: timeSpent ?? this.timeSpent, // New field
       cycle: cycle ?? this.cycle, // New field
       week: week ?? this.week, // New field
+      isAccessory: isAccessory ?? this.isAccessory, // New field
     );
   }
 
@@ -72,9 +76,10 @@ class WorkoutModel {
           volume == other.volume && // New field
           timeSpent == other.timeSpent && // New field
           cycle == other.cycle && // New field
-          week == other.week; // New field
+          week == other.week && // New field
+          isAccessory == other.isAccessory; // New field
 
   @override
   int get hashCode =>
-      id.hashCode ^ date.hashCode ^ exerciseName.hashCode ^ numberOfSets.hashCode ^ sets.hashCode ^ notes.hashCode ^ oneRM.hashCode ^ volume.hashCode ^ timeSpent.hashCode ^ cycle.hashCode ^ week.hashCode; // New fields
+      id.hashCode ^ date.hashCode ^ exerciseName.hashCode ^ numberOfSets.hashCode ^ sets.hashCode ^ notes.hashCode ^ oneRM.hashCode ^ volume.hashCode ^ timeSpent.hashCode ^ cycle.hashCode ^ week.hashCode ^ isAccessory.hashCode; // New fields
 }

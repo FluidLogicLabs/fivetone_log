@@ -17,6 +17,7 @@ class WorkoutAdapter {
       timeSpent: Duration(seconds: map['timeSpent'] as int? ?? 0), // Handle missing field
       cycle: map['cycle'] as int? ?? 1, // Handle missing field
       week: map['week'] as int? ?? 1, // Handle missing field
+      isAccessory: map['isAccessory'] as bool? ?? false, // Handle missing field
     );
   }
 
@@ -34,6 +35,7 @@ class WorkoutAdapter {
       'timeSpent': workout.timeSpent.inSeconds, // New field
       'cycle': workout.cycle, // New field
       'week': workout.week, // New field
+      'isAccessory': workout.isAccessory, // New field
     };
   }
 }

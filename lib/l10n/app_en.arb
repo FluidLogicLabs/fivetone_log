@@ -61,5 +61,12 @@
     "developedBy": "Developed by",
     "foundBug": "Found a bug or issue? Please report it via email!",
     "reportBugButton": "Report a bug",
-    "featureIdea": "Have an idea for a new feature? Let me know!"
+    "featureIdea": "Have an idea for a new feature? Let me know!",
+    "accessory": "Accessory",
+    "accessoryAdd": "Add exercise",
+    "accessoryAddSet": "Add set",
+    "accessoryRename": "Rename",
+    "accessoryDelete": "Delete",
+    "accessoryLastUsed": "Last used",
+    "accessoryNameHint": "Exercise name"
 }

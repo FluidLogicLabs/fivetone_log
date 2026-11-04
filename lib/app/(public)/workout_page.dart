@@ -5,6 +5,8 @@ import 'package:fivethreeone_log/app/interactor/models/set_model.dart';
 import 'package:fivethreeone_log/app/interactor/models/workout_model.dart';
 import 'package:fivethreeone_log/app/interactor/providers/preferences_provider.dart';
 import 'package:fivethreeone_log/app/interactor/providers/workout_provider.dart';
+import 'package:fivethreeone_log/app/interactor/providers/accessory_exercise_provider.dart'; // Accessory exercise catalogue
+import 'package:fivethreeone_log/app/utils/accessory_sets.dart'; // Accessory set parsing
 import 'package:fivethreeone_log/app/utils/utils.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
@@ -31,6 +33,8 @@ class _WorkoutPageState extends ConsumerState<WorkoutPage> {
   late Timer _setTimer;
   Duration _setTimerDuration = Duration.zero;
   Duration _selectedSetTimerDuration = const Duration(minutes: 2); // Default value
+  final Map<String, List<TextEditingController>> _accessoryRepsControllers = {}; // Accessory reps input per exercise
+  final Map<String, List<TextEditingController>> _accessoryWeightControllers = {}; // Accessory weight input per exercise
 
   void _showNotesDialog(AppLocalizations localizations) {
     showDialog(
@@ -194,6 +198,16 @@ class _WorkoutPageState extends ConsumerState<WorkoutPage> {
     _timer.cancel();
     _stopwatch.stop();
     _setTimer?.cancel();
+    for (final controllers in _accessoryRepsControllers.values) {
+      for (final controller in controllers) {
+        controller.dispose();
+      }
+    }
+    for (final controllers in _accessoryWeightControllers.values) {
+      for (final controller in controllers) {
+        controller.dispose();
+      }
+    }
     super.dispose();
   }
 
@@ -327,6 +341,427 @@ class _WorkoutPageState extends ConsumerState<WorkoutPage> {
     }
 
     await updateCycleAndWeek(exercise, newCycle, newWeek);
+  }
+
+  // Most recent accessory row saved under [name], used for the last-time
+  // prefill shown inside the accessory section.
+  WorkoutModel? _lastAccessoryWorkout(String name, List<WorkoutModel> workouts) {
+    WorkoutModel? last;
+    for (final workout in workouts) {
+      if (!workout.isAccessory || workout.exerciseName != name) {
+        continue;
+      }
+      if (last == null) {
+        last = workout;
+      } else if (workout.date.isAfter(last.date)) {
+        last = workout;
+      }
+    }
+    return last;
+  }
+
+  // Creates the input controllers for a catalogue entry the first time it is
+  // shown. The rows are seeded with last time's sets when there are any,
+  // otherwise three empty rows. Later edits are never overwritten.
+  void _ensureAccessoryControllers(String name, WorkoutModel? lastWorkout) {
+    if (_accessoryRepsControllers.containsKey(name)) {
+      return;
+    }
+    final List<TextEditingController> repsControllers = [];
+    final List<TextEditingController> weightControllers = [];
+    final List<SetModel> lastSets = lastWorkout?.sets ?? [];
+    final int rowCount = lastSets.isNotEmpty ? lastSets.length : 3;
+    for (int i = 0; i < rowCount; i++) {
+      final SetModel? lastSet = i < lastSets.length ? lastSets[i] : null;
+      repsControllers.add(TextEditingController(
+          text: lastSet != null ? '${lastSet.reps}' : ''));
+      weightControllers.add(TextEditingController(
+          text: lastSet != null ? '${lastSet.weight}' : ''));
+    }
+    _accessoryRepsControllers[name] = repsControllers;
+    _accessoryWeightControllers[name] = weightControllers;
+  }
+
+  void _addAccessorySet(String name) {
+    final repsControllers = _accessoryRepsControllers[name];
+    final weightControllers = _accessoryWeightControllers[name];
+    if (repsControllers == null || weightControllers == null) {
+      return;
+    }
+    setState(() {
+      repsControllers.add(TextEditingController());
+      weightControllers.add(TextEditingController());
+    });
+  }
+
+  void _removeAccessorySet(String name, int index) {
+    final repsControllers = _accessoryRepsControllers[name];
+    final weightControllers = _accessoryWeightControllers[name];
+    if (repsControllers == null || weightControllers == null) {
+      return;
+    }
+    if (index < 0 ||
+        index >= repsControllers.length ||
+        repsControllers.length <= 1) {
+      return;
+    }
+    final TextEditingController removedRepsController =
+        repsControllers.removeAt(index);
+    final TextEditingController removedWeightsController =
+        weightControllers.removeAt(index);
+    setState(() {});
+    // Dispose after the frame, once the removed rows are gone from the tree.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      removedRepsController.dispose();
+      removedWeightsController.dispose();
+    });
+  }
+
+  // "BW" where there is room for it, i.e. next to the weight input.
+  String? _accessoryWeightSuffix(String input) {
+    final String trimmed = input.trim();
+    if (trimmed.isEmpty) {
+      return formatAccessoryWeight(0.0);
+    }
+    final double? weight = double.tryParse(trimmed);
+    if (weight == null || weight != 0) {
+      return null;
+    }
+    return formatAccessoryWeight(weight);
+  }
+
+  // Dense summary of a saved accessory session, e.g. "8 x 60.0, 7 x 0 kg".
+  String _formatAccessorySets(List<SetModel> sets) {
+    return sets
+        .map((set) =>
+            '${set.reps} x ${formatAccessoryWeight(set.weight, compact: true)}')
+        .join(', ');
+  }
+
+  void _showAddAccessoryDialog(AppLocalizations localizations) {
+    final TextEditingController controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text(localizations.accessoryAdd),
+          content: TextField(
+            controller: controller,
+            decoration: InputDecoration(
+              hintText: localizations.accessoryNameHint,
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: Text(localizations.cancel.toUpperCase()),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+            TextButton(
+              child: Text(localizations.ok.toUpperCase()),
+              onPressed: () {
+                final String name = controller.text.trim();
+                Navigator.of(context).pop();
+                if (name.isNotEmpty) {
+                  ref
+                      .read(accessoryExercisesProvider.notifier)
+                      .addExercise(name);
+                }
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showRenameAccessoryDialog(String name, AppLocalizations localizations) {
+    final TextEditingController controller = TextEditingController(text: name);
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text(localizations.accessoryRename),
+          content: TextField(
+            controller: controller,
+            decoration: InputDecoration(
+              hintText: localizations.accessoryNameHint,
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: Text(localizations.cancel.toUpperCase()),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+            TextButton(
+              child: Text(localizations.ok.toUpperCase()),
+              onPressed: () {
+                final String newName = controller.text.trim();
+                Navigator.of(context).pop();
+                if (newName.isNotEmpty && newName != name) {
+                  _renameAccessory(name, newName);
+                }
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Renaming only changes the catalogue entry: rows already logged keep the old
+  // name, they are history.
+  Future<void> _renameAccessory(String oldName, String newName) async {
+    await ref
+        .read(accessoryExercisesProvider.notifier)
+        .renameExercise(oldName, newName);
+    // Keep whatever was already typed in this exercise's rows.
+    final repsControllers = _accessoryRepsControllers.remove(oldName);
+    final weightControllers = _accessoryWeightControllers.remove(oldName);
+    if (repsControllers != null && weightControllers != null) {
+      _accessoryRepsControllers[newName] = repsControllers;
+      _accessoryWeightControllers[newName] = weightControllers;
+    }
+  }
+
+  // Deleting only removes the catalogue entry: logged history rows stay.
+  Future<void> _deleteAccessory(String name) async {
+    await ref.read(accessoryExercisesProvider.notifier).deleteExercise(name);
+    final List<TextEditingController> removedRepsControllers =
+        _accessoryRepsControllers.remove(name) ?? <TextEditingController>[];
+    final List<TextEditingController> removedWeightsControllers =
+        _accessoryWeightControllers.remove(name) ?? <TextEditingController>[];
+    // Dispose after the frame, once the entry is gone from the tree.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      for (final controller in removedRepsControllers) {
+        controller.dispose();
+      }
+      for (final controller in removedWeightsControllers) {
+        controller.dispose();
+      }
+    });
+  }
+
+  // Writes one row per accessory exercise that has at least one filled set.
+  // Nothing entered means nothing written. oneRM and volume are never computed
+  // for accessory rows.
+  Future<void> _saveAccessoryData(int cycle, int week) async {
+    final accessoryExercises = ref.read(accessoryExercisesProvider);
+    if (accessoryExercises.isEmpty) {
+      return;
+    }
+    final DateTime now = DateTime.now();
+
+    for (final entry in accessoryExercises) {
+      final repsControllers = _accessoryRepsControllers[entry.name];
+      final weightControllers = _accessoryWeightControllers[entry.name];
+      if (repsControllers == null || weightControllers == null) {
+        continue;
+      }
+      final setsData = parseAccessorySets(
+        repsControllers.map((controller) => controller.text).toList(),
+        weightControllers.map((controller) => controller.text).toList(),
+      );
+      if (setsData == null) {
+        continue;
+      }
+
+      final workout = WorkoutModel(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        date: now,
+        exerciseName: entry.name,
+        numberOfSets: setsData.length,
+        sets: setsData,
+        notes: '',
+        oneRM: 0,
+        volume: 0,
+        timeSpent: Duration.zero,
+        cycle: cycle,
+        week: week,
+        isAccessory: true, // New field
+      );
+
+      await ref.read(workoutProvider.notifier).addWorkout(workout);
+      await ref
+          .read(accessoryExercisesProvider.notifier)
+          .touch(entry.name, widget.exercise);
+    }
+  }
+
+  // True when at least one accessory entry has a filled set row, so an
+  // accessory-only session can be saved.
+  bool _anyAccessorySetFilled() {
+    final Map<String, List<String>> repsInputs = {};
+    final Map<String, List<String>> weightInputs = {};
+    final names = <String>{
+      ..._accessoryRepsControllers.keys,
+      ..._accessoryWeightControllers.keys,
+    };
+    for (final name in names) {
+      repsInputs[name] = (_accessoryRepsControllers[name] ?? [])
+          .map((controller) => controller.text)
+          .toList();
+      weightInputs[name] = (_accessoryWeightControllers[name] ?? [])
+          .map((controller) => controller.text)
+          .toList();
+    }
+    return anyAccessorySetsFilled(repsInputs, weightInputs);
+  }
+
+  Widget _buildAccessorySection(
+    AppLocalizations localizations,
+    List<WorkoutModel> workouts,
+  ) {
+    final accessoryExercises = ref.watch(accessoryExercisesProvider);
+    final entries = [...accessoryExercises];
+    // Exercises already used on this lift day surface first, then alphabetical.
+    entries.sort((a, b) {
+      final bool aUsedHere = a.lastUsedLift == widget.exercise;
+      final bool bUsedHere = b.lastUsedLift == widget.exercise;
+      if (aUsedHere != bUsedHere) {
+        return aUsedHere ? -1 : 1;
+      }
+      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    });
+
+    return ExpansionTile(
+      title: Text(localizations.accessory),
+      children: [
+        for (final entry in entries)
+          _buildAccessoryEntryCard(entry.name, localizations, workouts),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            icon: const Icon(Icons.add),
+            label: Text(localizations.accessoryAdd),
+            onPressed: () => _showAddAccessoryDialog(localizations),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAccessoryEntryCard(
+    String name,
+    AppLocalizations localizations,
+    List<WorkoutModel> workouts,
+  ) {
+    final WorkoutModel? lastWorkout = _lastAccessoryWorkout(name, workouts);
+    _ensureAccessoryControllers(name, lastWorkout);
+    final repsControllers = _accessoryRepsControllers[name] ?? [];
+    final weightControllers = _accessoryWeightControllers[name] ?? [];
+
+    return Card(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10.0),
+      ),
+      elevation: 4.0,
+      margin: const EdgeInsets.all(8.0),
+      child: Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    name,
+                    style: Theme.of(context).textTheme.titleMedium,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                PopupMenuButton<String>(
+                  onSelected: (String value) {
+                    if (value == 'rename') {
+                      _showRenameAccessoryDialog(name, localizations);
+                    } else if (value == 'delete') {
+                      _deleteAccessory(name);
+                    }
+                  },
+                  itemBuilder: (BuildContext context) =>
+                      <PopupMenuEntry<String>>[
+                    PopupMenuItem<String>(
+                      value: 'rename',
+                      child: Text(localizations.accessoryRename),
+                    ),
+                    PopupMenuItem<String>(
+                      value: 'delete',
+                      child: Text(localizations.accessoryDelete),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            if (lastWorkout != null)
+              Row(
+                children: [
+                  const Icon(Icons.history, size: 16.0),
+                  const SizedBox(width: 8.0),
+                  Expanded(
+                    child: Text(
+                      '${localizations.accessoryLastUsed}: ${DateFormat('yyyy-MM-dd').format(lastWorkout.date)} - ${_formatAccessorySets(lastWorkout.sets)}',
+                      style: const TextStyle(fontSize: 12.0),
+                    ),
+                  ),
+                ],
+              ),
+            const SizedBox(height: 8.0),
+            for (int i = 0; i < repsControllers.length; i++)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4.0),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: repsControllers[i],
+                        keyboardType: TextInputType.number,
+                        decoration: InputDecoration(
+                          labelText: '${localizations.set} ${i + 1}',
+                          hintText: localizations.reps,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8.0),
+                    Expanded(
+                      child: TextFormField(
+                        controller: weightControllers[i],
+                        keyboardType: TextInputType.number,
+                        onChanged: (String value) {
+                          setState(() {});
+                        },
+                        decoration: InputDecoration(
+                          hintText: localizations.weight,
+                          suffixText:
+                              _accessoryWeightSuffix(weightControllers[i].text),
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      iconSize: 16.0,
+                      icon: const Icon(Icons.remove),
+                      onPressed: repsControllers.length > 1
+                          ? () => _removeAccessorySet(name, i)
+                          : null,
+                    ),
+                  ],
+                ),
+              ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                icon: const Icon(Icons.add),
+                label: Text(localizations.accessoryAddSet),
+                onPressed: () => _addAccessorySet(name),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
   
   String getTranslatedExerciseName(String exercise, AppLocalizations localizations) {
@@ -557,29 +992,42 @@ class _WorkoutPageState extends ConsumerState<WorkoutPage> {
                       ),
                     ],
                   ),
+                  _buildAccessorySection(localizations, workouts),
                 ],
               ),
             ),
             const SizedBox(height: 16),
             Center(
               child: ElevatedButton(
-                onPressed: _allSetsCompleted()
-                    ? () => _saveData(
-                        week,
-                        cycleWeekData['cycle'] ?? 1,
-                        oneRM,
-                        tm,
-                        widget.exercise,
-                        sets,
-                        (workout) => ref
-                            .read(workoutProvider.notifier)
-                            .addWorkout(workout),
-                        (exercise, cycle, week) => ref
-                            .read(preferencesProvider.notifier)
-                            .updateCycleAndWeek(exercise, cycle, week),
-                        (exercise, tm) => ref
-                            .read(preferencesProvider.notifier)
-                            .updateTmData(exercise, tm))
+                onPressed: _allSetsCompleted() || _anyAccessorySetFilled()
+                    ? () async {
+                        // Capture the session cycle/week before _saveData
+                        // advances them.
+                        final int sessionCycle = cycleWeekData['cycle'] ?? 1;
+                        final int sessionWeek = cycleWeekData['week'] ?? 1;
+                        // A partial main lift was never savable before, so
+                        // skipping it keeps every reachable path intact and
+                        // avoids saving an empty main-lift row.
+                        if (_allSetsCompleted()) {
+                          await _saveData(
+                              week,
+                              cycleWeekData['cycle'] ?? 1,
+                              oneRM,
+                              tm,
+                              widget.exercise,
+                              sets,
+                              (workout) => ref
+                                  .read(workoutProvider.notifier)
+                                  .addWorkout(workout),
+                              (exercise, cycle, week) => ref
+                                  .read(preferencesProvider.notifier)
+                                  .updateCycleAndWeek(exercise, cycle, week),
+                              (exercise, tm) => ref
+                                  .read(preferencesProvider.notifier)
+                                  .updateTmData(exercise, tm));
+                        }
+                        await _saveAccessoryData(sessionCycle, sessionWeek);
+                      }
                     : null,
                 child: Text(localizations.save),
               ),

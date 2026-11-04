@@ -69,10 +69,12 @@ jobs:
           echo "---"
           # Record the certificate so the signing situation is visible in the log
           # rather than assumed.
-          if command -v apksigner >/dev/null 2>&1; then
-            apksigner verify --print-certs build/app/outputs/flutter-apk/app-release.apk || true
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1)
+          if [ -n "$APKSIGNER" ]; then
+            "$APKSIGNER" print-certs build/app/outputs/flutter-apk/app-release.apk || true
           else
-            echo "apksigner not on PATH; skipping certificate dump"
+            unzip -l build/app/outputs/flutter-apk/app-release.apk | head -5
+            echo "apksigner not found under ANDROID_HOME; certificate not dumped"
           fi
 
       - name: Upload APK
@@ -82,3 +84,10 @@ jobs:
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 30
+
+      # Tests run AFTER the upload on purpose: a failing test should show up
+      # loudly and turn the run red, but it must not cost the artefact, because
+      # the APK is the thing being installed. Ordering the steps this way is
+      # deliberate, not accidental.
+      - name: Run unit tests
+        run: flutter test test/
