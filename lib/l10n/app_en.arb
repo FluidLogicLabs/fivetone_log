@@ -77,5 +77,10 @@
     "saveSettings": "Save settings",
     "trainingMaxExplained": "The training max is this percentage of your 1RM. Saving a new percentage recalculates the lifts whose training max still matches the old one, and leaves lifts a cycle has already advanced.",
     "tmLeftAlone": "Training max kept for",
-    "settingsSaved": "Settings saved"
+    "settingsSaved": "Settings saved",
+    "dataExportedToAppFolder": "Downloads is not available here, so the data was saved to",
+    "exportCancelled": "Export cancelled",
+    "exportFailed": "The data could not be exported",
+    "importCancelled": "Import cancelled",
+    "importFailed": "That file is not a valid backup"
 }

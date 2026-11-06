@@ -77,5 +77,10 @@
     "saveSettings": "Salvar configurações",
     "trainingMaxExplained": "O peso máximo de treino é esta porcentagem do seu 1RM. Ao salvar uma nova porcentagem, os exercícios cujo peso máximo ainda corresponde à anterior são recalculados, e os que já avançaram com um ciclo ficam como estão.",
     "tmLeftAlone": "Peso máximo mantido para",
-    "settingsSaved": "Configurações salvas"
+    "settingsSaved": "Configurações salvas",
+    "dataExportedToAppFolder": "Downloads indisponível; os dados foram salvos em",
+    "exportCancelled": "Exportação cancelada",
+    "exportFailed": "Não foi possível exportar os dados",
+    "importCancelled": "Importação cancelada",
+    "importFailed": "Esse arquivo não é um backup válido"
 }

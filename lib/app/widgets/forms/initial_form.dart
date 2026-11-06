@@ -5,6 +5,7 @@ import 'package:routefly/routefly.dart';
 import 'package:fivethreeone_log/app/interactor/models/preferences_model.dart';
 import 'package:fivethreeone_log/app/interactor/providers/preferences_provider.dart';
 import 'package:fivethreeone_log/app/widgets/default_option_button.dart';
+import 'package:fivethreeone_log/app/utils/backup.dart'; // Shared export and import
 import 'package:fivethreeone_log/app/utils/training_defaults.dart'; // Rounding step and training max percentage
 import 'package:fivethreeone_log/app/utils/utils.dart'; // Import the utility functions
 import 'package:flutter_gen/gen_l10n/app_localizations.dart'; // Import localization
@@ -54,6 +55,11 @@ class InitialFormState extends ConsumerState<InitialForm> {
   late final TextEditingController _tmPercentController;
   late final TextEditingController _roundingStepController;
 
+  // Bumped every time the fields are re-seeded. The text fields carry it in
+  // their keys, because a TextFormField keeps the text it was born with and
+  // would otherwise ignore a new initial value after an import.
+  int _seedGeneration = 0;
+
   @override
   void initState() {
     super.initState();
@@ -62,6 +68,76 @@ class InitialFormState extends ConsumerState<InitialForm> {
         TextEditingController(text: formatTmPercent(preferences.tmPercent));
     _roundingStepController = TextEditingController(
         text: formatRoundingStep(preferences.roundingStep));
+    // Nothing is typed yet, so every field starts on what is stored. On a
+    // first run nothing is stored and the zeros stay.
+    _applyStoredPreferences();
+  }
+
+  // Copies the stored training data into the fields. Runs once on open and
+  // again after an import, so the screen always shows what the app is about to
+  // use rather than a factory table. Cycle and week are stored in preferences
+  // and are never read or written here.
+  void _applyStoredPreferences() {
+    final preferences = ref.read(preferencesProvider);
+
+    final String storedUnit = preferences.selectedUnit.toLowerCase();
+    if (storedUnit.isNotEmpty) {
+      selectedUnit = weightUnits.firstWhere(
+        (unit) => unit.toLowerCase() == storedUnit,
+        orElse: () => selectedUnit,
+      );
+    }
+
+    // A stored 1RM is shown as a single rep, which is the only reading of the
+    // two fields that reproduces it exactly.
+    for (final exercise in _rmData.keys) {
+      final double? storedOneRM = preferences.rmData[exercise];
+      _rmData[exercise]!['peso'] = storedOneRM ?? 0;
+      _rmData[exercise]!['repeticoes'] = storedOneRM == null ? 0 : 1;
+    }
+
+    // Stored percentages win over the defaults, so reopening the screen cannot
+    // quietly put the table back to the factory values.
+    for (final week in _percData.keys) {
+      final Map<String, double>? storedWeek = preferences.percData[week];
+      if (storedWeek == null) {
+        continue;
+      }
+      for (final exerciseSet in _percData[week]!.keys) {
+        final double? stored = storedWeek[exerciseSet];
+        if (stored != null) {
+          _percData[week]![exerciseSet] = stored;
+        }
+      }
+    }
+
+    _tmPercentController.text = formatTmPercent(preferences.tmPercent);
+    _roundingStepController.text = formatRoundingStep(preferences.roundingStep);
+    _seedGeneration++;
+  }
+
+  // A number as it belongs in a text field: no trailing decimal on a whole
+  // number, and nothing else changed.
+  String _formatFieldNumber(double value) => value == value.roundToDouble()
+      ? value.toStringAsFixed(0)
+      : value.toString();
+
+  // What a 1RM field starts on: empty when nothing is stored, the stored
+  // number otherwise.
+  String _fieldValue(String exercise, String field) {
+    final double value = _rmData[exercise]![field]!;
+    return value == 0 ? '' : _formatFieldNumber(value);
+  }
+
+  // The two backup actions live on this screen as well as the export page.
+  // An import replaces everything, so the fields are re-read from the store
+  // afterwards and show the file's data instead of the stale form state.
+  Future<void> _importBackup(AppLocalizations localizations) async {
+    final bool imported = await runImport(context, ref, localizations);
+    if (!imported || !mounted) {
+      return;
+    }
+    setState(_applyStoredPreferences);
   }
 
   @override
@@ -171,6 +247,26 @@ class InitialFormState extends ConsumerState<InitialForm> {
                 // Você pode adicionar aqui lógica para salvar a seleção
               },
             ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => runExport(context, ref, localizations),
+                    icon: const Icon(Icons.upload_file),
+                    label: Text(localizations.exportData),
+                  ),
+                ),
+                const SizedBox(width: 8.0),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _importBackup(localizations),
+                    icon: const Icon(Icons.download),
+                    label: Text(localizations.importData),
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 16),
             ExpansionTile(
               maintainState: true,
@@ -197,6 +293,10 @@ class InitialFormState extends ConsumerState<InitialForm> {
                                     padding: const EdgeInsets.symmetric(
                                         horizontal: 8.0),
                                     child: TextFormField(
+                                      key: ValueKey<String>(
+                                          'rm-weight-$exercise-$_seedGeneration'),
+                                      initialValue:
+                                          _fieldValue(exercise, 'peso'),
                                       keyboardType: TextInputType.number,
                                       decoration: InputDecoration(
                                         labelText:
@@ -225,6 +325,10 @@ class InitialFormState extends ConsumerState<InitialForm> {
                                     padding: const EdgeInsets.symmetric(
                                         horizontal: 8.0),
                                     child: TextFormField(
+                                      key: ValueKey<String>(
+                                          'rm-reps-$exercise-$_seedGeneration'),
+                                      initialValue:
+                                          _fieldValue(exercise, 'repeticoes'),
                                       keyboardType: TextInputType.number,
                                       inputFormatters: [
                                         LengthLimitingTextInputFormatter(2),
@@ -251,7 +355,7 @@ class InitialFormState extends ConsumerState<InitialForm> {
                                 child: Text(
                                   _rmData[exercise]!['repeticoes']! == 0
                                       ? '1RM: 0.00'
-                                      : '1RM: ${calculate1RM(_rmData[exercise]!['peso']!, _rmData[exercise]!['repeticoes']!.toInt()).toStringAsFixed(2)}',
+                                      : '1RM: ${oneRMFromEntry(_rmData[exercise]!['peso']!, _rmData[exercise]!['repeticoes']!.toInt()).toStringAsFixed(2)}',
                                 ),
                               ))
                             ],
@@ -289,6 +393,8 @@ class InitialFormState extends ConsumerState<InitialForm> {
                                       padding: const EdgeInsets.symmetric(
                                           horizontal: 8.0),
                                       child: TextFormField(
+                                        key: ValueKey<String>(
+                                            'perc-$week-$exerciceSet-$_seedGeneration'),
                                         keyboardType: TextInputType.number,
                                         initialValue:
                                             _percData[week]![exerciceSet]
