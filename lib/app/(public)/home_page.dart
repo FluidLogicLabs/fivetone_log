@@ -9,6 +9,7 @@ import 'package:fivethreeone_log/app/(public)/workout_page.dart'; // Import the 
 import 'package:fivethreeone_log/app/(public)/saved_workouts_page.dart'; // Import the SavedWorkoutsPage
 import 'package:intl/intl.dart'; // Import DateFormat
 import 'package:fivethreeone_log/app/(public)/export_import_page.dart'; // Import the ExportImportPage
+import 'package:fivethreeone_log/app/(public)/form_page.dart'; // Re-enter 1RM and training max data
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:fivethreeone_log/app/utils/exercise_names.dart'; // Import the exercise names mapping
 
@@ -38,6 +39,19 @@ class HomePage extends ConsumerWidget {
                 context,
                 MaterialPageRoute(
                   builder: (context) => const SavedWorkoutsPage(),
+                ),
+              );
+            },
+          ),
+          // The 1RM entry screen, reachable after the first run as well.
+          IconButton(
+            icon: const Icon(Icons.tune),
+            tooltip: localizations.trainingSetup,
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const FormPage(),
                 ),
               );
             },

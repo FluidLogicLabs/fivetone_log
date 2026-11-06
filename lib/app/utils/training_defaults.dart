@@ -6,17 +6,28 @@ import 'utils.dart';
 /// stored preference and a missing preference can never tell different
 /// stories.
 
-/// The smallest weight jump the app rounds to when nothing else is stored.
-/// One kilo keeps the old whole-unit behaviour, so a preferences map written
-/// before the step existed behaves exactly as it did.
-const double defaultRoundingStep = 1.0;
+/// The smallest weight jump the app rounds to when nothing is stored, which is
+/// every install that has never touched the setting: half a kilo, so a 2.5 kg
+/// plate pair can actually be loaded.
+const double defaultRoundingStep = 0.5;
 
-/// Rounds a stored rounding step to something usable. A step of zero would
-/// divide by zero and a negative step would round the wrong way, so anything
-/// that is not a positive, finite number falls back to [defaultRoundingStep].
+/// The step used when a stored value exists but cannot be read as a step. Zero
+/// would divide by zero and a negative step would round the wrong way, so the
+/// unusable value is replaced by whole kilos rather than by the default, since
+/// a whole kilo is the coarser, safer reading and never asks for a plate that
+/// is not on the bar.
+const double fallbackRoundingStep = 1.0;
+
+/// Rounds a stored rounding step to something usable. Absent means the setting
+/// has never been touched, so it gets [defaultRoundingStep]. Present and
+/// unusable gets [fallbackRoundingStep]. The two are deliberately different so
+/// a corrupt value cannot masquerade as a default.
 double sanitiseRoundingStep(double? step) {
-  if (step == null || step.isNaN || !step.isFinite || step <= 0) {
+  if (step == null) {
     return defaultRoundingStep;
+  }
+  if (step.isNaN || !step.isFinite || step <= 0) {
+    return fallbackRoundingStep;
   }
   return step;
 }
@@ -73,9 +84,11 @@ String formatTmPercent(double percent) {
 
 /// The 1RM behind one entry of weight and reps. One rep is the weight itself:
 /// running a single rep through Epley adds 3.33% that nobody lifted, and it
-/// would inflate the figure every time the entry form is reopened.
+/// would inflate the figure every time the entry form is reopened. No reps at
+/// all is read the same way, because a weight with no reps is a typed number
+/// the user meant as a max, not a claim about a set.
 double oneRMFromEntry(double weight, int reps) {
-  if (reps == 1) {
+  if (reps <= 1) {
     return weight;
   }
   return calculate1RM(weight, reps);
@@ -174,4 +187,43 @@ double cycleIncrementFor(String exercise, Map<String, double> increments) {
     return stored;
   }
   return defaultCycleIncrement[exercise] ?? fallbackCycleIncrement;
+}
+
+/// What one typed entry of weight and reps means for the two stored numbers.
+class RecalculatedMax {
+  final double oneRM;
+  final double trainingMax;
+
+  const RecalculatedMax({required this.oneRM, required this.trainingMax});
+}
+
+/// Rebuilds the 1RM and the training max from one typed entry, or null when
+/// there is no usable weight. Null is what lets a recalculation skip a lift the
+/// user left blank instead of writing a zero over a real number.
+RecalculatedMax? recalculateMax({
+  required double weight,
+  required int reps,
+  required double tmPercent,
+}) {
+  if (weight.isNaN || !weight.isFinite || weight <= 0) {
+    return null;
+  }
+  final double oneRM = oneRMFromEntry(weight, reps);
+  return RecalculatedMax(
+    oneRM: oneRM,
+    trainingMax: deriveTrainingMax(oneRM, tmPercent),
+  );
+}
+
+/// The cycle and week map to store when the entry screen is saved: a lift that
+/// already has a place in the block keeps it, and only a lift that has never
+/// had one starts at cycle one of week one.
+Map<String, Map<String, int>> cycleWeekPreserving(
+  Map<String, Map<String, int>> stored,
+  Iterable<String> exercises,
+) {
+  return {
+    for (final exercise in exercises)
+      exercise: stored[exercise] ?? const {'cycle': 1, 'week': 1},
+  };
 }

@@ -82,5 +82,12 @@
     "exportCancelled": "Export cancelled",
     "exportFailed": "The data could not be exported",
     "importCancelled": "Import cancelled",
-    "importFailed": "That file is not a valid backup"
+    "importFailed": "That file is not a valid backup",
+    "trainingSetup": "Training setup",
+    "trainingMax": "TM",
+    "current": "Current",
+    "recalculate": "Recalculate",
+    "recalculateAll": "Recalculate all lifts",
+    "recalculated": "Recalculated",
+    "recalculateExplained": "Recalculating sets the training max back to your training max percentage of the 1RM, so any cycle increments are dropped. Your cycle and week stay exactly where they are."
 }

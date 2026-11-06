@@ -82,5 +82,12 @@
     "exportCancelled": "Exportação cancelada",
     "exportFailed": "Não foi possível exportar os dados",
     "importCancelled": "Importação cancelada",
-    "importFailed": "Esse arquivo não é um backup válido"
+    "importFailed": "Esse arquivo não é um backup válido",
+    "trainingSetup": "Configuração de treino",
+    "trainingMax": "PMT",
+    "current": "Atual",
+    "recalculate": "Recalcular",
+    "recalculateAll": "Recalcular todos os exercícios",
+    "recalculated": "Recalculado",
+    "recalculateExplained": "Recalcular volta o peso máximo de treino para a porcentagem configurada do 1RM, então os incrementos de ciclo são descartados. Seu ciclo e sua semana continuam exatamente onde estão."
 }

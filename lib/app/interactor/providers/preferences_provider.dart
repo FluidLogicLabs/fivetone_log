@@ -60,6 +60,23 @@ class PreferencesNotifier extends StateNotifier<PreferencesModel> {
     state = updatedPreferences;
   }
 
+  // Write a 1RM and a training max the user recalculated by hand. Cycle and
+  // week are not part of this call on purpose: re-entering a max does not move
+  // the training block forward or back.
+  Future<void> updateRmAndTm(
+    Map<String, double> rmData,
+    Map<String, double> tmData,
+  ) async {
+    final updatedRmData = Map<String, double>.from(state.rmData)..addAll(rmData);
+    final updatedTmData = Map<String, double>.from(state.tmData)..addAll(tmData);
+    final updatedPreferences = state.copyWith(
+      rmData: updatedRmData,
+      tmData: updatedTmData,
+    );
+    await _repository.update(updatedPreferences);
+    state = updatedPreferences;
+  }
+
   // Round every calculated weight up to the next multiple of this step.
   Future<void> updateRoundingStep(double step) async {
     final updatedPreferences =

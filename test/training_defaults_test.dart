@@ -3,8 +3,9 @@ import 'package:fivethreeone_log/app/utils/training_defaults.dart';
 
 void main() {
   group('rounding step', () {
-    test('a missing, zero, negative or non-finite step becomes one', () {
-      expect(sanitiseRoundingStep(null), 1.0);
+    test('an unusable step becomes whole kilos and a missing one the default', () {
+      // Absent is the untouched default, not the fallback.
+      expect(sanitiseRoundingStep(null), 0.5);
       expect(sanitiseRoundingStep(0), 1.0);
       expect(sanitiseRoundingStep(-0.5), 1.0);
       expect(sanitiseRoundingStep(double.nan), 1.0);
@@ -60,7 +61,7 @@ void main() {
       expect(oneRMFromEntry(120, 1), 120.0);
       // Anything else still goes through the Epley formula in utils.
       expect(oneRMFromEntry(100, 5), 117.0); // 100 x 5 x 0.0333 + 100 = 116.65
-      expect(oneRMFromEntry(100, 0), 0.0);
+      expect(oneRMFromEntry(100, 0), 100.0);
     });
 
     test('the percentage label drops the decimal on a whole percentage', () {
@@ -209,6 +210,54 @@ void main() {
     test('the defaults cover exactly the four main lifts', () {
       expect(defaultCycleIncrement.keys.toList(),
           ['Supino', 'Press militar', 'Agachamento', 'Levantamento terra']);
+    });
+  });
+
+  group('re-entering a max', () {
+    test('one rep is the 1RM itself and goes straight through the percentage',
+        () {
+      final recalculated = recalculateMax(weight: 120, reps: 1, tmPercent: 85)!;
+      expect(recalculated.oneRM, 120.0);
+      // 120 at 85% is 102, not the 108 a 90% training max had reached.
+      expect(recalculated.trainingMax, 102.0);
+    });
+
+    test('several reps go through Epley, then the percentage', () {
+      // 100 x 5 rounds up to 117 on the way out of calculate1RM.
+      final recalculated = recalculateMax(weight: 100, reps: 5, tmPercent: 90)!;
+      expect(recalculated.oneRM, 117.0);
+      // 117 at 90% is 105.3, and the training max itself is never rounded.
+      expect(recalculated.trainingMax, closeTo(105.3, 1e-9));
+    });
+
+    test('a blank or unusable weight gives nothing back', () {
+      // Null is what stops a recalculation writing a zero over a real max.
+      expect(recalculateMax(weight: 0, reps: 5, tmPercent: 85), isNull);
+      expect(recalculateMax(weight: -20, reps: 5, tmPercent: 85), isNull);
+      expect(recalculateMax(weight: double.nan, reps: 5, tmPercent: 85), isNull);
+      expect(recalculateMax(weight: double.infinity, reps: 5, tmPercent: 85),
+          isNull);
+    });
+
+    test('saving the entry screen keeps a cycle and week in progress', () {
+      final kept = cycleWeekPreserving(
+        {
+          'Supino': {'cycle': 3, 'week': 2},
+        },
+        ['Supino', 'Agachamento'],
+      );
+
+      expect(kept['Supino'], {'cycle': 3, 'week': 2});
+      // A lift that has never been trained starts at cycle one, week one.
+      expect(kept['Agachamento'], {'cycle': 1, 'week': 1});
+    });
+
+    test('a lift with no stored place in the block is not given someone else',
+        () {
+      final kept = cycleWeekPreserving({}, ['Supino']);
+      expect(kept, {
+        'Supino': {'cycle': 1, 'week': 1},
+      });
     });
   });
 }

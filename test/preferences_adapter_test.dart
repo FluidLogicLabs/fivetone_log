@@ -60,7 +60,9 @@ void main() {
   });
 
   test('the rounding step defaults to one and survives storage', () {
-    expect(_emptyPreferences().roundingStep, 1.0);
+    // Nothing stored means the setting has never been touched, which is the
+    // half kilo default, not the whole kilo fallback.
+    expect(_emptyPreferences().roundingStep, 0.5);
 
     final decoded = _throughStorage(_emptyPreferences().copyWith(roundingStep: 0.5));
 
@@ -78,6 +80,7 @@ void main() {
       'roundingStep': 0,
     };
 
+    // A stored but unusable step falls back to whole kilos.
     expect(PreferencesAdapter.fromMap(map).roundingStep, 1.0);
   });
 
@@ -104,7 +107,7 @@ void main() {
     final preferences = PreferencesAdapter.fromMap(map);
 
     expect(preferences.tmPercent, 85.0);
-    expect(preferences.roundingStep, 1.0);
+    expect(preferences.roundingStep, 0.5);
     // The stored training max is what the cycles left behind, so it is kept
     // exactly as it was written.
     expect(preferences.tmData['Supino'], 90.0);

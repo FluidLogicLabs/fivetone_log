@@ -7,7 +7,6 @@ import 'package:fivethreeone_log/app/interactor/providers/preferences_provider.d
 import 'package:fivethreeone_log/app/widgets/default_option_button.dart';
 import 'package:fivethreeone_log/app/utils/backup.dart'; // Shared export and import
 import 'package:fivethreeone_log/app/utils/training_defaults.dart'; // Rounding step and training max percentage
-import 'package:fivethreeone_log/app/utils/utils.dart'; // Import the utility functions
 import 'package:flutter_gen/gen_l10n/app_localizations.dart'; // Import localization
 
 class InitialForm extends ConsumerStatefulWidget {
@@ -140,6 +139,102 @@ class InitialFormState extends ConsumerState<InitialForm> {
     setState(_applyStoredPreferences);
   }
 
+  // What is stored for one lift right now, shown above its fields so an old
+  // number is never mistaken for a fresh one. It states cycle and week because
+  // those are the two things a re-entry does not touch.
+  String _storedSummary(
+    String exercise,
+    PreferencesModel preferences,
+    AppLocalizations localizations,
+  ) {
+    final double? storedOneRM = preferences.rmData[exercise];
+    final double? storedTrainingMax = preferences.tmData[exercise] ??
+        (storedOneRM == null
+            ? null
+            : deriveTrainingMax(storedOneRM, preferences.tmPercent));
+    final Map<String, int>? cycleWeek = preferences.cycleWeekData[exercise];
+
+    final List<String> parts = [
+      localizations.current,
+      if (storedOneRM != null)
+        '${localizations.oneRM} ${_formatFieldNumber(storedOneRM)}',
+      if (storedTrainingMax != null)
+        '${localizations.trainingMax} ${_formatFieldNumber(storedTrainingMax)}',
+      if (cycleWeek != null) '${localizations.cycle} ${cycleWeek['cycle'] ?? 1}',
+      if (cycleWeek != null) '${localizations.week} ${cycleWeek['week'] ?? 1}',
+    ];
+    return parts.join(' · ');
+  }
+
+  // Rebuilds the 1RM and the training max from what is typed in the fields.
+  // Cycle and week are left alone: the training max goes back to the configured
+  // percentage, but the block does not move. Lifts with no weight typed are
+  // skipped rather than zeroed.
+  Future<void> _recalculate(
+    Iterable<String> exercises,
+    AppLocalizations localizations,
+  ) async {
+    final preferences = ref.read(preferencesProvider);
+    final Map<String, double> rmData = <String, double>{};
+    final Map<String, double> tmData = <String, double>{};
+
+    for (final exercise in exercises) {
+      final RecalculatedMax? recalculated = recalculateMax(
+        weight: _rmData[exercise]!['peso']!,
+        reps: _rmData[exercise]!['repeticoes']!.toInt(),
+        tmPercent: preferences.tmPercent,
+      );
+      if (recalculated == null) {
+        continue;
+      }
+      rmData[exercise] = recalculated.oneRM;
+      tmData[exercise] = recalculated.trainingMax;
+    }
+
+    if (rmData.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(localizations.checkInputData)),
+      );
+      return;
+    }
+
+    await ref.read(preferencesProvider.notifier).updateRmAndTm(rmData, tmData);
+
+    if (!mounted) {
+      return;
+    }
+    setState(_applyStoredPreferences);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(localizations.recalculated)),
+    );
+  }
+
+  // Recalculating every lift throws away every cycle increment at once, so it
+  // asks first and says what happens to the block before doing it.
+  Future<void> _recalculateAll(AppLocalizations localizations) async {
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(localizations.recalculateAll),
+        content: Text(localizations.recalculateExplained),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(localizations.cancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(localizations.recalculateAll),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) {
+      return;
+    }
+    await _recalculate(_rmData.keys, localizations);
+  }
+
   @override
   void dispose() {
     _tmPercentController.dispose();
@@ -229,6 +324,9 @@ class InitialFormState extends ConsumerState<InitialForm> {
   @override
   Widget build(BuildContext context) {
     final localizations = AppLocalizations.of(context)!;
+    // Watched, not read: the stored summary has to follow a recalculation or an
+    // import the moment it lands.
+    final preferences = ref.watch(preferencesProvider);
 
     return Form(
       key: _formKey,
@@ -283,6 +381,16 @@ class InitialFormState extends ConsumerState<InitialForm> {
                             getExerciseName(exercise, localizations),
                           ),
                         ),
+                        if (preferences.rmData[exercise] != null) ...[
+                          const SizedBox(height: 2.0),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              _storedSummary(exercise, preferences, localizations),
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: 10.0),
                         Center(
                           child: Row(
@@ -357,13 +465,41 @@ class InitialFormState extends ConsumerState<InitialForm> {
                                       ? '1RM: 0.00'
                                       : '1RM: ${oneRMFromEntry(_rmData[exercise]!['peso']!, _rmData[exercise]!['repeticoes']!.toInt()).toStringAsFixed(2)}',
                                 ),
-                              ))
+                              )),
+                              // One lift at a time: no confirmation, because
+                              // the text above the fields already says what a
+                              // recalculation does.
+                              IconButton(
+                                tooltip: localizations.recalculate,
+                                icon: const Icon(Icons.refresh),
+                                onPressed: () =>
+                                    _recalculate([exercise], localizations),
+                              ),
                             ],
                           ),
                         ),
                       ],
                     ),
                   ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  child: Text(
+                    localizations.recalculateExplained,
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ),
+                Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () => _recalculateAll(localizations),
+                      icon: const Icon(Icons.refresh),
+                      label: Text(localizations.recalculateAll),
+                    ),
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 16),
@@ -527,18 +663,26 @@ class InitialFormState extends ConsumerState<InitialForm> {
                                   _rmData[exercise]!['repeticoes']!.toInt()),
                               tmPercent)
                       };
-                      final Map<String, Map<String, int>> cycleWeekData = {
-                        for (var exercise in _rmData.keys) exercise: {'cycle': 1, 'week': 1}
-                      };
-                      await ref.read(preferencesProvider.notifier).setPreferences(
-                        PreferencesModel(
-                          selectedUnit: selectedUnit,
-                          rmData: rmData,
-                          tmData: tmData,
-                          percData: _percData,
-                          cycleWeekData: cycleWeekData
-                        )
-                      );
+                      // A cycle and a week already in progress stay where they
+                      // are. Only a lift that has never had them starts at one.
+                      final Map<String, Map<String, int>> cycleWeekData =
+                          cycleWeekPreserving(
+                              preferences.cycleWeekData, _rmData.keys);
+                      // Built from the stored preferences rather than a fresh
+                      // model, so the rounding step, the training max
+                      // percentage, the increments and the warmup choices are
+                      // not quietly reset by saving this screen.
+                      await ref
+                          .read(preferencesProvider.notifier)
+                          .setPreferences(
+                            preferences.copyWith(
+                              selectedUnit: selectedUnit,
+                              rmData: rmData,
+                              tmData: tmData,
+                              percData: _percData,
+                              cycleWeekData: cycleWeekData,
+                            ),
+                          );
                       // Redirect to home page using Routefly
                       Routefly.navigate('/home');
                     } else {
