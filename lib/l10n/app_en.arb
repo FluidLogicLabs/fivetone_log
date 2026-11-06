@@ -89,5 +89,7 @@
     "recalculate": "Recalculate",
     "recalculateAll": "Recalculate all lifts",
     "recalculated": "Recalculated",
-    "recalculateExplained": "Recalculating sets the training max back to your training max percentage of the 1RM, so any cycle increments are dropped. Your cycle and week stay exactly where they are."
+    "recalculateExplained": "Recalculating sets the training max back to your training max percentage of the 1RM, so any cycle increments are dropped. Your cycle and week stay exactly where they are.",
+    "cycleIncrement": "Cycle increment",
+    "cycleIncrementExplained": "How much each lift's training max goes up when a cycle finishes. Saving settings does not change any training max now."
 }

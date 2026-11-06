@@ -69,12 +69,15 @@ Future<_FakePreferencesRepository> _openEntryScreen(WidgetTester tester) async {
   final repository = _FakePreferencesRepository(_storedPreferences());
   final localizations = await AppLocalizations.delegate.load(const Locale('en'));
 
+  // The notifier starts empty and reads the store when it loads, exactly as the
+  // app does on startup, so the screen is opened the way a user opens it.
+  final notifier = PreferencesNotifier(repository);
+  await notifier.loadPreferences();
+
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
-        preferencesProvider.overrideWith(
-          (ref) => PreferencesNotifier(repository),
-        ),
+        preferencesProvider.overrideWith((ref) => notifier),
       ],
       child: MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,

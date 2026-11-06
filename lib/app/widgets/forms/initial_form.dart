@@ -54,6 +54,9 @@ class InitialFormState extends ConsumerState<InitialForm> {
   late final TextEditingController _tmPercentController;
   late final TextEditingController _roundingStepController;
 
+  // One field per lift for how much its training max climbs after a cycle.
+  late final Map<String, TextEditingController> _incrementControllers;
+
   // Bumped every time the fields are re-seeded. The text fields carry it in
   // their keys, because a TextFormField keeps the text it was born with and
   // would otherwise ignore a new initial value after an import.
@@ -67,6 +70,13 @@ class InitialFormState extends ConsumerState<InitialForm> {
         TextEditingController(text: formatTmPercent(preferences.tmPercent));
     _roundingStepController = TextEditingController(
         text: formatRoundingStep(preferences.roundingStep));
+    _incrementControllers = {
+      for (final exercise in _rmData.keys)
+        exercise: TextEditingController(
+          text: _formatFieldNumber(
+              cycleIncrementFor(exercise, preferences.cycleIncrement)),
+        ),
+    };
     // Nothing is typed yet, so every field starts on what is stored. On a
     // first run nothing is stored and the zeros stay.
     _applyStoredPreferences();
@@ -112,6 +122,10 @@ class InitialFormState extends ConsumerState<InitialForm> {
 
     _tmPercentController.text = formatTmPercent(preferences.tmPercent);
     _roundingStepController.text = formatRoundingStep(preferences.roundingStep);
+    for (final exercise in _incrementControllers.keys) {
+      _incrementControllers[exercise]!.text = _formatFieldNumber(
+          cycleIncrementFor(exercise, preferences.cycleIncrement));
+    }
     _seedGeneration++;
   }
 
@@ -239,6 +253,9 @@ class InitialFormState extends ConsumerState<InitialForm> {
   void dispose() {
     _tmPercentController.dispose();
     _roundingStepController.dispose();
+    for (final controller in _incrementControllers.values) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
@@ -256,6 +273,18 @@ class InitialFormState extends ConsumerState<InitialForm> {
         _typedNumber(_tmPercentController.text) ?? current.tmPercent;
 
     await notifier.updateRoundingStep(typedStep);
+
+    // Each increment is written as typed. A field holding nonsense leaves the
+    // stored increment alone rather than being replaced by a guess.
+    for (final exercise in _incrementControllers.keys) {
+      final double? typedIncrement =
+          _typedNumber(_incrementControllers[exercise]!.text);
+      if (typedIncrement == null || typedIncrement <= 0) {
+        continue;
+      }
+      await notifier.updateCycleIncrement(exercise, typedIncrement);
+    }
+
     final TrainingMaxRecalculation plan =
         await notifier.updateTmPercent(typedPercent);
 
@@ -268,6 +297,12 @@ class InitialFormState extends ConsumerState<InitialForm> {
     setState(() {
       _roundingStepController.text = formatRoundingStep(saved.roundingStep);
       _tmPercentController.text = formatTmPercent(saved.tmPercent);
+      // Written back from the store, so a refused increment does not sit in
+      // the field pretending it was saved.
+      for (final exercise in _incrementControllers.keys) {
+        _incrementControllers[exercise]!.text = _formatFieldNumber(
+            cycleIncrementFor(exercise, saved.cycleIncrement));
+      }
     });
     final String keptNote = plan.kept.isEmpty
         ? ''
@@ -614,6 +649,42 @@ class InitialFormState extends ConsumerState<InitialForm> {
                   padding: const EdgeInsets.symmetric(horizontal: 16.0),
                   child: Text(
                     localizations.trainingMaxExplained,
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                for (final exercise in _rmData.keys)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16.0, vertical: 4.0),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(getExerciseName(exercise, localizations)),
+                        ),
+                        SizedBox(
+                          width: 120,
+                          child: TextFormField(
+                            key: ValueKey<String>(
+                                'increment-$exercise-$_seedGeneration'),
+                            controller: _incrementControllers[exercise],
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [
+                              LengthLimitingTextInputFormatter(5),
+                            ],
+                            decoration: InputDecoration(
+                              labelText: localizations.cycleIncrement,
+                              border: const OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  child: Text(
+                    localizations.cycleIncrementExplained,
                     style: const TextStyle(fontSize: 12),
                   ),
                 ),

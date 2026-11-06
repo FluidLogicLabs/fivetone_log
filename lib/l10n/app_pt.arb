@@ -89,5 +89,7 @@
     "recalculate": "Recalcular",
     "recalculateAll": "Recalcular todos os exercícios",
     "recalculated": "Recalculado",
-    "recalculateExplained": "Recalcular volta o peso máximo de treino para a porcentagem configurada do 1RM, então os incrementos de ciclo são descartados. Seu ciclo e sua semana continuam exatamente onde estão."
+    "recalculateExplained": "Recalcular volta o peso máximo de treino para a porcentagem configurada do 1RM, então os incrementos de ciclo são descartados. Seu ciclo e sua semana continuam exatamente onde estão.",
+    "cycleIncrement": "Incremento de ciclo",
+    "cycleIncrementExplained": "Quanto o peso máximo de treino de cada exercício sobe ao terminar um ciclo. Salvar as configurações não altera nenhum peso máximo agora."
 }
