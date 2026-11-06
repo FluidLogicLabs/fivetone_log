@@ -70,6 +70,7 @@
     "accessoryLastUsed": "Last used",
     "accessoryNameHint": "Exercise name",
     "warmup": "Warmup",
+    "workingSets": "Working",
     "fsl": "FSL",
     "trainingSettings": "Training settings",
     "trainingMaxPercentage": "Training max percentage",
