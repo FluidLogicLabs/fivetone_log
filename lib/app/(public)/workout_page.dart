@@ -8,6 +8,7 @@ import 'package:fivethreeone_log/app/interactor/providers/workout_provider.dart'
 import 'package:fivethreeone_log/app/interactor/providers/accessory_exercise_provider.dart'; // Accessory exercise catalogue
 import 'package:fivethreeone_log/app/utils/accessory_sets.dart'; // Accessory set parsing
 import 'package:fivethreeone_log/app/utils/session_plan.dart'; // Warmups, working sets and FSL for the day
+import 'package:fivethreeone_log/app/utils/training_defaults.dart'; // Rounding step, training max percentage, cycle increment
 import 'package:fivethreeone_log/app/utils/utils.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
@@ -1124,6 +1125,9 @@ class _WorkoutPageState extends ConsumerState<WorkoutPage> {
       mainReps: repsForWeek,
       includeWarmups: warmupSetsEnabled,
       includeFsl: fslEnabled,
+      // One preference decides the step for the ladder, the working sets and
+      // FSL together, so the three can never round differently.
+      roundingStep: sanitiseRoundingStep(preferences.roundingStep),
     );
 
     return Scaffold(

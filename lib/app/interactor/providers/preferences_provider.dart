@@ -1,6 +1,7 @@
 import 'package:auto_injector/auto_injector.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fivethreeone_log/app/injector.dart';
+import '../../utils/training_defaults.dart';
 import '../models/preferences_model.dart';
 import '../repository/preferences_repository.dart';
 
@@ -55,6 +56,14 @@ class PreferencesNotifier extends StateNotifier<PreferencesModel> {
     final updatedTmData = Map<String, double>.from(state.tmData)
       ..[key] = newTm;
     final updatedPreferences = state.copyWith(tmData: updatedTmData);
+    await _repository.update(updatedPreferences);
+    state = updatedPreferences;
+  }
+
+  // Round every calculated weight up to the next multiple of this step.
+  Future<void> updateRoundingStep(double step) async {
+    final updatedPreferences =
+        state.copyWith(roundingStep: sanitiseRoundingStep(step));
     await _repository.update(updatedPreferences);
     state = updatedPreferences;
   }

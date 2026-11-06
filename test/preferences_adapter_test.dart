@@ -58,6 +58,28 @@ void main() {
     expect(decoded, preferences);
   });
 
+  test('the rounding step defaults to one and survives storage', () {
+    expect(_emptyPreferences().roundingStep, 1.0);
+
+    final decoded = _throughStorage(_emptyPreferences().copyWith(roundingStep: 0.5));
+
+    expect(decoded.roundingStep, 0.5);
+    expect(decoded, _emptyPreferences().copyWith(roundingStep: 0.5));
+  });
+
+  test('a stored rounding step of zero is refused on read', () {
+    final map = <String, dynamic>{
+      'selectedUnit': 'kg',
+      'rmData': <String, double>{},
+      'percData': <String, dynamic>{},
+      'cycleWeekData': <String, dynamic>{},
+      'tmData': <String, double>{},
+      'roundingStep': 0,
+    };
+
+    expect(PreferencesAdapter.fromMap(map).roundingStep, 1.0);
+  });
+
   test('FSL stays off for a lift that was never toggled', () {
     final decoded = _throughStorage(
       _emptyPreferences().copyWith(fslData: {'Supino': true}),

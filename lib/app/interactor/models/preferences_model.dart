@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import '../../utils/training_defaults.dart';
+
 @immutable
 class PreferencesModel {
   final String selectedUnit;
@@ -11,6 +13,9 @@ class PreferencesModel {
   // map is keyed by exercise name like tmData and cycleWeekData are.
   final bool warmupSetsEnabled;
   final Map<String, bool> fslData;
+  // The weight rounding step, in the selected unit. Every calculated weight
+  // rounds up to the next multiple of it. One kilo is the old behaviour.
+  final double roundingStep;
 
   const PreferencesModel({
     required this.selectedUnit,
@@ -20,6 +25,7 @@ class PreferencesModel {
     required this.tmData,
     this.warmupSetsEnabled = true,
     this.fslData = const {},
+    this.roundingStep = defaultRoundingStep,
   });
 
   PreferencesModel copyWith({
@@ -30,6 +36,7 @@ class PreferencesModel {
     Map<String, double>? tmData,
     bool? warmupSetsEnabled,
     Map<String, bool>? fslData,
+    double? roundingStep,
   }) {
     return PreferencesModel(
       selectedUnit: selectedUnit ?? this.selectedUnit,
@@ -39,6 +46,7 @@ class PreferencesModel {
       tmData: tmData ?? this.tmData,
       warmupSetsEnabled: warmupSetsEnabled ?? this.warmupSetsEnabled,
       fslData: fslData ?? this.fslData,
+      roundingStep: roundingStep ?? this.roundingStep,
     );
   }
 
@@ -53,9 +61,10 @@ class PreferencesModel {
           mapEquals(cycleWeekData, other.cycleWeekData) && // New field
           mapEquals(tmData, other.tmData) && // Add this line
           warmupSetsEnabled == other.warmupSetsEnabled &&
-          mapEquals(fslData, other.fslData);
+          mapEquals(fslData, other.fslData) &&
+          roundingStep == other.roundingStep;
 
   @override
   int get hashCode =>
-      selectedUnit.hashCode ^ rmData.hashCode ^ percData.hashCode ^ cycleWeekData.hashCode ^ tmData.hashCode ^ warmupSetsEnabled.hashCode ^ fslData.hashCode; // Add tmData to hashCode
+      selectedUnit.hashCode ^ rmData.hashCode ^ percData.hashCode ^ cycleWeekData.hashCode ^ tmData.hashCode ^ warmupSetsEnabled.hashCode ^ fslData.hashCode ^ roundingStep.hashCode; // Add tmData to hashCode
 }

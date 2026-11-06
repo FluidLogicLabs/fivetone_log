@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import 'training_defaults.dart';
+
 /// One set the session window shows and logs: a weight derived from the
 /// training max, plus the percentage of the training max it came from.
 ///
@@ -47,23 +49,33 @@ const List<int> warmupReps = [5, 5, 3];
 const int fslSetCount = 5;
 const int fslReps = 5;
 
-/// Rounds a percentage of [trainingMax] exactly the way the working sets round:
-/// up to the next whole unit, never down. Every calculated weight in the app
-/// goes through this shape, so the tables, the warmups and the FSL sets can
-/// never disagree by a kilo.
-double weightForPercentage(double trainingMax, double percentage) {
-  return (trainingMax * (percentage / 100)).ceilToDouble();
+/// Rounds a percentage of [trainingMax] up to the next multiple of [step],
+/// never down. Every calculated weight in the app goes through this shape, so
+/// the tables, the warmups and the FSL sets can never disagree by a kilo.
+///
+/// [step] is the user's rounding step, in the selected unit. The default of
+/// one keeps the original whole-unit behaviour, and a step that is not a
+/// positive finite number is refused here as well so a bad preference can
+/// never divide by zero.
+double weightForPercentage(double trainingMax, double percentage,
+    {double step = 1}) {
+  final double safeStep = sanitiseRoundingStep(step);
+  return (trainingMax * percentage / 100 / safeStep).ceil() * safeStep;
 }
 
 /// The warmup ladder: 40% x 5, 50% x 5, 60% x 3 of [trainingMax].
-List<PlannedSet> buildWarmupSets(double trainingMax, {int startSetNumber = 1}) {
+List<PlannedSet> buildWarmupSets(
+  double trainingMax, {
+  int startSetNumber = 1,
+  double step = 1,
+}) {
   final List<PlannedSet> sets = [];
   for (int i = 0; i < warmupPercentages.length; i++) {
     final double percentage = warmupPercentages[i];
     sets.add(PlannedSet(
       setNumber: startSetNumber + i,
       reps: warmupReps[i],
-      weight: weightForPercentage(trainingMax, percentage),
+      weight: weightForPercentage(trainingMax, percentage, step: step),
       percentage: percentage,
     ));
   }
@@ -77,6 +89,7 @@ List<PlannedSet> buildMainSets(
   List<double> weekPercentages,
   List<int> mainReps, {
   int startSetNumber = 1,
+  double step = 1,
 }) {
   final List<PlannedSet> sets = [];
   for (int i = 0; i < weekPercentages.length; i++) {
@@ -86,7 +99,7 @@ List<PlannedSet> buildMainSets(
       // Weeks without a scheme of their own run 5s; the stored tables
       // always carry three reps, this only guards a short list.
       reps: i < mainReps.length ? mainReps[i] : 5,
-      weight: weightForPercentage(trainingMax, percentage),
+      weight: weightForPercentage(trainingMax, percentage, step: step),
       percentage: percentage,
     ));
   }
@@ -100,8 +113,10 @@ List<PlannedSet> buildFslSets(
   double trainingMax,
   double firstSetPercentage, {
   int startSetNumber = 1,
+  double step = 1,
 }) {
-  final double weight = weightForPercentage(trainingMax, firstSetPercentage);
+  final double weight =
+      weightForPercentage(trainingMax, firstSetPercentage, step: step);
   return [
     for (int i = 0; i < fslSetCount; i++)
       PlannedSet(
@@ -168,6 +183,7 @@ SessionPlan buildSessionPlan({
   required List<int> mainReps,
   bool includeWarmups = true,
   bool includeFsl = false,
+  double roundingStep = 1,
 }) {
   final bool hasTrainingMax = trainingMax > 0;
 
@@ -176,7 +192,7 @@ SessionPlan buildSessionPlan({
   final bool deload = isDeloadWeek(weekPercentages);
 
   final List<PlannedSet> warmupSets = includeWarmups && hasTrainingMax && !deload
-      ? buildWarmupSets(trainingMax)
+      ? buildWarmupSets(trainingMax, step: roundingStep)
       : const <PlannedSet>[];
 
   final List<PlannedSet> mainSets = buildMainSets(
@@ -184,6 +200,7 @@ SessionPlan buildSessionPlan({
     weekPercentages,
     mainReps,
     startSetNumber: warmupSets.length + 1,
+    step: roundingStep,
   );
 
   final List<PlannedSet> fslSets =
@@ -192,6 +209,7 @@ SessionPlan buildSessionPlan({
               trainingMax,
               weekPercentages.first,
               startSetNumber: warmupSets.length + mainSets.length + 1,
+              step: roundingStep,
             )
           : const <PlannedSet>[];
 

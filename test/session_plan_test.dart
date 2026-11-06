@@ -270,4 +270,86 @@ void main() {
       expect(plan.fslSets.first.weight, 36.0); // 90 x 40%
     });
   });
+
+  group('rounding step', () {
+    test('the default step is still the whole unit', () {
+      expect(weightForPercentage(90, 85), 77.0);
+      expect(weightForPercentage(90, 85, step: 1), 77.0);
+    });
+
+    test('a half-kilo step rounds up to the next half', () {
+      // 90 x 85% is 76.5 exactly, which is already on a half.
+      expect(weightForPercentage(90, 85, step: 0.5), 76.5);
+      // 95 x 65% is 61.75, the next half above it is 62.0.
+      expect(weightForPercentage(95, 65, step: 0.5), 62.0);
+      // 105.5 x 62.5% is 65.9375, the next half above it is 66.0.
+      expect(weightForPercentage(105.5, 62.5, step: 0.5), 66.0);
+    });
+
+    test('a step above one rounds up to its own multiple', () {
+      // 105.5 x 62.5% is 65.9375, the next 2.5 is 67.5.
+      expect(weightForPercentage(105.5, 62.5, step: 2.5), 67.5);
+      expect(weightForPercentage(100, 65, step: 2.5), 65.0);
+    });
+
+    test('never rounds down, whatever the step', () {
+      // 52.5 x 65% is 34.125, the next half above it is 34.5.
+      expect(weightForPercentage(52.5, 65, step: 0.5), 34.5);
+      expect(weightForPercentage(52.5, 65, step: 5), 35.0);
+    });
+
+    test('a zero, negative or non-finite step falls back to one', () {
+      // A zero step would divide by zero, so it behaves exactly like the
+      // default rather than throwing or hanging.
+      expect(weightForPercentage(90, 85, step: 0), 77.0);
+      expect(weightForPercentage(90, 85, step: -0.5), 77.0);
+      expect(weightForPercentage(90, 85, step: double.nan), 77.0);
+      expect(weightForPercentage(90, 85, step: double.infinity), 77.0);
+      expect(weightForPercentage(90, 85, step: double.negativeInfinity), 77.0);
+    });
+
+    test('the ladder rounds to the same step as the working sets', () {
+      expect(buildWarmupSets(95, step: 0.5).map((set) => set.weight).toList(),
+          [38.0, 47.5, 57.0]); // 47.5 used to round up to 48
+      expect(buildWarmupSets(95).map((set) => set.weight).toList(),
+          [38.0, 48.0, 57.0]);
+    });
+
+    test('FSL copies the first working set at the same step', () {
+      expect(buildFslSets(95, 65, step: 0.5).first.weight, 62.0);
+      expect(buildFslSets(105.5, 62.5, step: 2.5).first.weight, 67.5);
+    });
+
+    test('the whole plan shares one step', () {
+      final plan = buildSessionPlan(
+        trainingMax: 102.5,
+        weekPercentages: [65, 75, 85],
+        mainReps: [5, 5, 5],
+        includeWarmups: true,
+        includeFsl: true,
+        roundingStep: 2.5,
+      );
+
+      expect(plan.all.map((set) => set.weight).toList(), [
+        42.5, 52.5, 62.5, // warmups: 41, 51.25, 61.5 rounded up to 2.5s
+        67.5, 77.5, 87.5, // working sets: 66.625, 76.875, 87.125
+        67.5, 67.5, 67.5, 67.5, 67.5, // FSL copies the first working set
+      ]);
+    });
+
+    test('the half step plan keeps the same percentages on the labels', () {
+      final plan = buildSessionPlan(
+        trainingMax: 90,
+        weekPercentages: [65, 75, 85],
+        mainReps: [5, 5, 5],
+        includeWarmups: false,
+        includeFsl: false,
+        roundingStep: 0.5,
+      );
+
+      expect(plan.all.map((set) => set.weight).toList(), [58.5, 67.5, 76.5]);
+      expect(plan.all.map((set) => set.percentage).toList(), [65.0, 75.0, 85.0]);
+      expect(formatPercentageLabel(plan.all.last.percentage), '85%');
+    });
+  });
 }
