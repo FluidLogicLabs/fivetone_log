@@ -181,10 +181,10 @@ void main() {
     test('the four main lifts carry the standard increments', () {
       const Map<String, double> stored = {};
 
-      expect(cycleIncrementFor('Supino', stored), 5.0);
-      expect(cycleIncrementFor('Press militar', stored), 5.0);
-      expect(cycleIncrementFor('Agachamento', stored), 10.0);
-      expect(cycleIncrementFor('Levantamento terra', stored), 10.0);
+      expect(cycleIncrementFor('Supino', stored), 2.5);
+      expect(cycleIncrementFor('Press militar', stored), 2.5);
+      expect(cycleIncrementFor('Agachamento', stored), 5.0);
+      expect(cycleIncrementFor('Levantamento terra', stored), 5.0);
     });
 
     test('a stored increment wins over the default', () {
@@ -193,18 +193,18 @@ void main() {
     });
 
     test('a lift in neither place gets the smallest standard increment', () {
-      expect(cycleIncrementFor('Remada curvada', {}), 5.0);
-      expect(cycleIncrementFor('Remada curvada', {'Supino': 2.5}), 5.0);
+      expect(cycleIncrementFor('Remada curvada', {}), 2.5);
+      expect(cycleIncrementFor('Remada curvada', {'Supino': 2.5}), 2.5);
     });
 
     test('a zero, negative or non-finite stored increment is refused', () {
       // A cycle that adds nothing, or takes weight off, is not a cycle.
-      expect(cycleIncrementFor('Supino', {'Supino': 0}), 5.0);
-      expect(cycleIncrementFor('Supino', {'Supino': -2.5}), 5.0);
-      expect(cycleIncrementFor('Agachamento', {'Agachamento': double.nan}), 10.0);
+      expect(cycleIncrementFor('Supino', {'Supino': 0}), 2.5);
+      expect(cycleIncrementFor('Supino', {'Supino': -2.5}), 2.5);
+      expect(cycleIncrementFor('Agachamento', {'Agachamento': double.nan}), 5.0);
       expect(
           cycleIncrementFor('Agachamento', {'Agachamento': double.infinity}),
-          10.0);
+          5.0);
     });
 
     test('the defaults cover exactly the four main lifts', () {
