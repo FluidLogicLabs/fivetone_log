@@ -59,7 +59,7 @@ void main() {
     expect(decoded, preferences);
   });
 
-  test('the rounding step defaults to one and survives storage', () {
+  test('the rounding step defaults to half a kilo and survives storage', () {
     // Nothing stored means the setting has never been touched, which is the
     // half kilo default, not the whole kilo fallback.
     expect(_emptyPreferences().roundingStep, 0.5);
@@ -70,7 +70,7 @@ void main() {
     expect(decoded, _emptyPreferences().copyWith(roundingStep: 0.5));
   });
 
-  test('a stored rounding step of zero is refused on read', () {
+  test('a stored rounding step of zero falls back to whole kilos', () {
     final map = <String, dynamic>{
       'selectedUnit': 'kg',
       'rmData': <String, double>{},
