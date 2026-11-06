@@ -49,6 +49,25 @@ const List<int> warmupReps = [5, 5, 3];
 const int fslSetCount = 5;
 const int fslReps = 5;
 
+/// The rep scheme the working sets of [week] are performed at: the 5s of weeks
+/// one and four, the 3s of week two and 5/3/1 in week three.
+///
+/// It lives here, next to the plan builder, so the session screen and the edit
+/// page cannot disagree about how many working sets a week has.
+List<int> mainRepsForWeek(int week) {
+  switch (week) {
+    case 1:
+    case 4:
+      return [5, 5, 5];
+    case 2:
+      return [3, 3, 3];
+    case 3:
+      return [5, 3, 1];
+    default:
+      return [5, 5, 5];
+  }
+}
+
 /// Rounds a percentage of [trainingMax] up to the next multiple of [step],
 /// never down. Every calculated weight in the app goes through this shape, so
 /// the tables, the warmups and the FSL sets can never disagree by a kilo.

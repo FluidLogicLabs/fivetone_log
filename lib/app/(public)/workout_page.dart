@@ -278,20 +278,6 @@ class _WorkoutPageState extends ConsumerState<WorkoutPage> {
     );
   }
 
-  List<int> _getRepsForWeek(int week) {
-    switch (week) {
-      case 1:
-      case 4:
-        return [5, 5, 5];
-      case 2:
-        return [3, 3, 3];
-      case 3:
-        return [5, 3, 1];
-      default:
-        return [5, 5, 5];
-    }
-  }
-
   // Maps every planned set to the completion index its row uses, in the order
   // the sets are lifted.
   Map<int, PlannedSet> _planByIndex(SessionPlan plan) {
@@ -1118,7 +1104,7 @@ class _WorkoutPageState extends ConsumerState<WorkoutPage> {
 
     final week = cycleWeekData['week']!;
     final sets = percData['Semana $week']?.entries.toList() ?? [];
-    final repsForWeek = _getRepsForWeek(week);
+    final repsForWeek = mainRepsForWeek(week);
     final bool warmupSetsEnabled = preferences.warmupSetsEnabled;
     final bool fslEnabled = preferences.fslData[widget.exercise] ?? false;
     final SessionPlan plan = buildSessionPlan(
