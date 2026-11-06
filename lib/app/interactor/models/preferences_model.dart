@@ -7,6 +7,10 @@ class PreferencesModel {
   final Map<String, Map<String, double>> percData;
   final Map<String, Map<String, int>> cycleWeekData; // New field
   final Map<String, double> tmData; // Add this field
+  // Session extras. Warmups are on by default; FSL is opt in per lift, so the
+  // map is keyed by exercise name like tmData and cycleWeekData are.
+  final bool warmupSetsEnabled;
+  final Map<String, bool> fslData;
 
   const PreferencesModel({
     required this.selectedUnit,
@@ -14,6 +18,8 @@ class PreferencesModel {
     required this.percData,
     required this.cycleWeekData, // New field
     required this.tmData,
+    this.warmupSetsEnabled = true,
+    this.fslData = const {},
   });
 
   PreferencesModel copyWith({
@@ -22,6 +28,8 @@ class PreferencesModel {
     Map<String, Map<String, double>>? percData,
     Map<String, Map<String, int>>? cycleWeekData, // New field
     Map<String, double>? tmData,
+    bool? warmupSetsEnabled,
+    Map<String, bool>? fslData,
   }) {
     return PreferencesModel(
       selectedUnit: selectedUnit ?? this.selectedUnit,
@@ -29,6 +37,8 @@ class PreferencesModel {
       percData: percData ?? this.percData,
       cycleWeekData: cycleWeekData ?? this.cycleWeekData, // New field
       tmData: tmData ?? this.tmData,
+      warmupSetsEnabled: warmupSetsEnabled ?? this.warmupSetsEnabled,
+      fslData: fslData ?? this.fslData,
     );
   }
 
@@ -41,9 +51,11 @@ class PreferencesModel {
           mapEquals(rmData, other.rmData) && // Changed to store 1RM values
           mapEquals(percData, other.percData) &&
           mapEquals(cycleWeekData, other.cycleWeekData) && // New field
-          mapEquals(tmData, other.tmData); // Add this line
+          mapEquals(tmData, other.tmData) && // Add this line
+          warmupSetsEnabled == other.warmupSetsEnabled &&
+          mapEquals(fslData, other.fslData);
 
   @override
   int get hashCode =>
-      selectedUnit.hashCode ^ rmData.hashCode ^ percData.hashCode ^ cycleWeekData.hashCode ^ tmData.hashCode; // Add tmData to hashCode
+      selectedUnit.hashCode ^ rmData.hashCode ^ percData.hashCode ^ cycleWeekData.hashCode ^ tmData.hashCode ^ warmupSetsEnabled.hashCode ^ fslData.hashCode; // Add tmData to hashCode
 }

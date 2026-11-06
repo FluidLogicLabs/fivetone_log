@@ -59,6 +59,22 @@ class PreferencesNotifier extends StateNotifier<PreferencesModel> {
     state = updatedPreferences;
   }
 
+  // Show or hide the warmup ladder for every session
+  Future<void> updateWarmupSetsEnabled(bool enabled) async {
+    final updatedPreferences = state.copyWith(warmupSetsEnabled: enabled);
+    await _repository.update(updatedPreferences);
+    state = updatedPreferences;
+  }
+
+  // Turn FSL on or off for one lift
+  Future<void> updateFslData(String exercise, bool enabled) async {
+    final updatedFslData = Map<String, bool>.from(state.fslData)
+      ..[exercise] = enabled;
+    final updatedPreferences = state.copyWith(fslData: updatedFslData);
+    await _repository.update(updatedPreferences);
+    state = updatedPreferences;
+  }
+
   // Update Percentage Data
   Future<void> updatePercData(String key, Map<String, double> newData) async {
     final updatedPercData =

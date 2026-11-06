@@ -68,5 +68,7 @@
     "accessoryRename": "Renomear",
     "accessoryDelete": "Excluir",
     "accessoryLastUsed": "Último uso",
-    "accessoryNameHint": "Nome do exercício"
+    "accessoryNameHint": "Nome do exercício",
+    "warmup": "Aquecimento",
+    "fsl": "FSL"
 }

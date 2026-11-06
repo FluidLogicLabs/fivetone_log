@@ -68,5 +68,7 @@
     "accessoryRename": "Rename",
     "accessoryDelete": "Delete",
     "accessoryLastUsed": "Last used",
-    "accessoryNameHint": "Exercise name"
+    "accessoryNameHint": "Exercise name",
+    "warmup": "Warmup",
+    "fsl": "FSL"
 }

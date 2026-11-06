@@ -7,6 +7,7 @@ import 'package:fivethreeone_log/app/interactor/providers/preferences_provider.d
 import 'package:fivethreeone_log/app/interactor/providers/workout_provider.dart';
 import 'package:fivethreeone_log/app/interactor/providers/accessory_exercise_provider.dart'; // Accessory exercise catalogue
 import 'package:fivethreeone_log/app/utils/accessory_sets.dart'; // Accessory set parsing
+import 'package:fivethreeone_log/app/utils/session_plan.dart'; // Warmups, working sets and FSL for the day
 import 'package:fivethreeone_log/app/utils/utils.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
@@ -43,6 +44,12 @@ class _WorkoutPageState extends ConsumerState<WorkoutPage> {
   // Sections only get their initial state after the first frame, so this flips
   // once and never goes back.
   bool _expansionSeeded = false;
+  // Each group of sets ticks into its own stretch of the maps above. The gaps
+  // leave room for 3 warmups, 3 working sets and 5 FSL sets, so turning a group
+  // on mid-session cannot shift another group's ticks.
+  static const int _warmupIndexBase = 0;
+  static const int _mainIndexBase = 10;
+  static const int _fslIndexBase = 20;
 
   void _showNotesDialog(AppLocalizations localizations) {
     showDialog(
@@ -196,7 +203,7 @@ class _WorkoutPageState extends ConsumerState<WorkoutPage> {
       final workouts = ref.read(workoutProvider);
       setState(() {
         for (int i = 0; i < sets.length; i++) {
-          _isCompleted[i] = false;
+          _isCompleted[_mainIndexBase + i] = false;
         }
         // A section opens only when today already has a saved workout for it.
         // That saved data is the only signal available this early, live input
@@ -284,17 +291,33 @@ class _WorkoutPageState extends ConsumerState<WorkoutPage> {
     }
   }
 
-  bool _allSetsCompleted() {
-    return _isCompleted.values.every((completed) => completed) && _isCompleted.isNotEmpty;
+  // Maps every planned set to the completion index its row uses, in the order
+  // the sets are lifted.
+  Map<int, PlannedSet> _planByIndex(SessionPlan plan) {
+    return {
+      for (int i = 0; i < plan.warmupSets.length; i++)
+        _warmupIndexBase + i: plan.warmupSets[i],
+      for (int i = 0; i < plan.mainSets.length; i++)
+        _mainIndexBase + i: plan.mainSets[i],
+      for (int i = 0; i < plan.fslSets.length; i++)
+        _fslIndexBase + i: plan.fslSets[i],
+    };
+  }
+
+  // Only the sets the session currently shows count, so a group that is
+  // switched off can never hold the save button hostage.
+  bool _allSetsCompleted(SessionPlan plan) {
+    final indices = _planByIndex(plan).keys;
+    return indices.isNotEmpty &&
+        indices.every((index) => _isCompleted[index] ?? false);
   }
 
   Future<void> _saveData(
       int week,
       int cycle,
-      double oneRM,
       double actualTM,
       String exercise,
-      List<MapEntry<String, double>> sets,
+      SessionPlan plan,
       Function(WorkoutModel) onSave,
       Function(String, int, int) updateCycleAndWeek,
       Function(String, double) updateTM) async {
@@ -305,21 +328,34 @@ class _WorkoutPageState extends ConsumerState<WorkoutPage> {
     final Duration totalTime = _stopwatch.elapsed; // Get total time
 
     double totalVolume = 0.0;
+    SetModel? lastMainSet;
 
-    _isCompleted.forEach((index, completed) {
-      if (completed) {
-        final reps = _reps[index] ?? _getRepsForWeek(week)[index];
-        final weight = _weights[index] ?? (oneRM * (sets[index].value / 100)).ceilToDouble();
-        setsData.add(SetModel(
-          setNumber: index + 1,
-          reps: reps,
-          weight: weight,
-        ));
-        totalVolume += weight * reps;
+    // Warmups, working sets and FSL are all written, in the order lifted.
+    _planByIndex(plan).forEach((index, planned) {
+      if (_isCompleted[index] != true) {
+        return;
+      }
+      final reps = _reps[index] ?? planned.reps;
+      final weight = _weights[index] ?? planned.weight;
+      final SetModel set = SetModel(
+        setNumber: planned.setNumber,
+        reps: reps,
+        weight: weight,
+      );
+      setsData.add(set);
+      totalVolume += weight * reps;
+      if (plan.mainSets.contains(planned)) {
+        lastMainSet = set;
       }
     });
 
-    final lastSet = setsData.last;
+    if (setsData.isEmpty) {
+      return;
+    }
+
+    // The stored 1RM comes from the last working set: a lighter FSL or warmup
+    // set at the end of the session would otherwise deflate the estimate.
+    final lastSet = lastMainSet ?? setsData.last;
     final calculated1RM = calculate1RM(lastSet.weight, lastSet.reps);
 
     final workout = WorkoutModel(
@@ -869,6 +905,192 @@ class _WorkoutPageState extends ConsumerState<WorkoutPage> {
     }
   }
   
+  // Group header inside the main lift section: "Warmup" above the ladder, "FSL"
+  // below the working sets.
+  Widget _buildGroupLabel(String label) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8.0, 8.0, 8.0, 0.0),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(label, style: Theme.of(context).textTheme.titleSmall),
+      ),
+    );
+  }
+
+  // The percentage is context, not the headline: small and muted, directly
+  // under the weight it describes.
+  Widget _buildPercentageLabel(double percentage) {
+    final ThemeData theme = Theme.of(context);
+    return Text(
+      formatPercentageLabel(percentage),
+      style: theme.textTheme.bodySmall?.copyWith(
+        fontSize: 10.0,
+        color: theme.disabledColor,
+      ),
+    );
+  }
+
+  // Compact label and switch, so both session toggles fit on one row.
+  Widget _buildSessionToggle({
+    required String label,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return Row(
+      children: [
+        Flexible(
+          child: Text(
+            label,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        Switch(value: value, onChanged: onChanged),
+      ],
+    );
+  }
+
+  // One table per group: warmups, working sets, FSL. [indexBase] keeps each
+  // group on its own stretch of the tick and edit maps, so switching a group on
+  // or off never shifts another group's ticks.
+  Widget _buildSetsTable(
+    List<PlannedSet> plannedSets,
+    int indexBase,
+    AppLocalizations localizations,
+    String unit,
+  ) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: DataTable(
+        columnSpacing: 10.0,
+        columns: [
+          DataColumn(
+            numeric: false,
+            tooltip: localizations.set,
+            onSort: (columnIndex, ascending) {},
+            label: Center(child: Text(localizations.set)),
+          ),
+          DataColumn(
+            numeric: false,
+            tooltip: localizations.reps,
+            onSort: (columnIndex, ascending) {},
+            label: Center(child: Text(localizations.reps)),
+          ),
+          DataColumn(
+            numeric: false,
+            tooltip: unit,
+            label: Center(child: Text(unit)),
+          ),
+        ],
+        rows: List<DataRow>.generate(
+          plannedSets.length,
+          (i) {
+            final int index = indexBase + i;
+            final PlannedSet planned = plannedSets[i];
+            final bool isCompleted = _isCompleted[index] ?? false;
+            final int reps = _reps[index] ?? planned.reps;
+            final double weight = _weights[index] ?? planned.weight;
+            return DataRow(
+              cells: [
+                DataCell(
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Checkbox(
+                        value: isCompleted,
+                        onChanged: (bool? value) {
+                          setState(() {
+                            _isCompleted[index] = value ?? false;
+                            if (value == true) {
+                              _startSetTimer();
+                            }
+                          });
+                        },
+                      ),
+                      Text('${planned.setNumber}'),
+                    ],
+                  ),
+                ),
+                DataCell(
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      IconButton(
+                        iconSize: 16.0,
+                        icon: const Icon(Icons.remove),
+                        onPressed: () {
+                          setState(() {
+                            _reps[index] = (reps > 0) ? reps - 1 : 0;
+                          });
+                        },
+                      ),
+                      Text('$reps'),
+                      IconButton(
+                        iconSize: 16.0,
+                        icon: const Icon(Icons.add),
+                        onPressed: () {
+                          setState(() {
+                            _reps[index] = reps + 1;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                DataCell(
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      GestureDetector(
+                        onLongPress: () {
+                          _showWeightDialog(index, weight, localizations);
+                        },
+                        child: IconButton(
+                          iconSize: 16.0,
+                          icon: const Icon(Icons.remove),
+                          onPressed: () {
+                            setState(() {
+                              _weights[index] = (weight > 0) ? weight - 1 : 0;
+                            });
+                          },
+                        ),
+                      ),
+                      GestureDetector(
+                        onLongPress: () {
+                          _showWeightDialog(index, weight, localizations);
+                        },
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text('$weight'),
+                            _buildPercentageLabel(planned.percentage),
+                          ],
+                        ),
+                      ),
+                      GestureDetector(
+                        onLongPress: () {
+                          _showWeightDialog(index, weight, localizations);
+                        },
+                        child: IconButton(
+                          iconSize: 16.0,
+                          icon: const Icon(Icons.add),
+                          onPressed: () {
+                            setState(() {
+                              _weights[index] = weight + 1;
+                            });
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final preferences = ref.watch(preferencesProvider);
@@ -894,6 +1116,15 @@ class _WorkoutPageState extends ConsumerState<WorkoutPage> {
     final week = cycleWeekData['week']!;
     final sets = percData['Semana $week']?.entries.toList() ?? [];
     final repsForWeek = _getRepsForWeek(week);
+    final bool warmupSetsEnabled = preferences.warmupSetsEnabled;
+    final bool fslEnabled = preferences.fslData[widget.exercise] ?? false;
+    final SessionPlan plan = buildSessionPlan(
+      trainingMax: tm,
+      weekPercentages: sets.map((set) => set.value).toList(),
+      mainReps: repsForWeek,
+      includeWarmups: warmupSetsEnabled,
+      includeFsl: fslEnabled,
+    );
 
     return Scaffold(
       appBar: AppBar(
@@ -935,13 +1166,37 @@ class _WorkoutPageState extends ConsumerState<WorkoutPage> {
             Text('${localizations.cycle}: ${cycleWeekData['cycle']}'),
             Text('${localizations.week}: $week'),
             Text('TM2: $tm ${preferences.selectedUnit}'), // Show TM value
+            // Session extras. Both switches persist with the rest of the
+            // preferences: warmups globally, FSL per lift.
+            Row(
+              children: [
+                Expanded(
+                  child: _buildSessionToggle(
+                    label: localizations.warmup,
+                    value: warmupSetsEnabled,
+                    onChanged: (bool value) => ref
+                        .read(preferencesProvider.notifier)
+                        .updateWarmupSetsEnabled(value),
+                  ),
+                ),
+                Expanded(
+                  child: _buildSessionToggle(
+                    label: localizations.fsl,
+                    value: fslEnabled,
+                    onChanged: (bool value) => ref
+                        .read(preferencesProvider.notifier)
+                        .updateFslData(widget.exercise, value),
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 16),
             Expanded(
               child: ListView(
                 children: [
                   ExpansionTile(
                     // Rebuilt once, when the first-frame seed lands; see
-                    // [_seedKey]. Everything inside the tile is unchanged.
+                    // [_seedKey].
                     key: _seedKey('mainLift'),
                     initiallyExpanded: _mainLiftExpanded,
                     onExpansionChanged: (bool expanded) {
@@ -951,144 +1206,20 @@ class _WorkoutPageState extends ConsumerState<WorkoutPage> {
                     },
                     title: Text(localizations.mainLift),
                     children: [
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: DataTable(
-                          columnSpacing: 10.0,
-                          columns: [
-                            DataColumn(
-                              numeric: false,
-                              tooltip: localizations.set,
-                              onSort: (columnIndex, ascending) {},
-                              label: Center(child: Text(localizations.set)),
-                            ),
-                            DataColumn(
-                              numeric: false,
-                              tooltip: localizations.reps,
-                              onSort: (columnIndex, ascending) {},
-                              label: Center(child: Text(localizations.reps)),
-                            ),
-                            DataColumn(
-                              numeric: false,
-                              tooltip: preferences.selectedUnit,
-                              label:
-                                  Center(child: Text(preferences.selectedUnit)),
-                            ),
-                          ],
-                          rows: List<DataRow>.generate(
-                            sets.length,
-                            (index) {
-                              final setName =
-                                  sets[index].key.replaceAll('Série ', '');
-                              final percentage = sets[index].value;
-                              // Use TM for weight calculation
-                              final initialWeight =
-                                  (tm * (percentage / 100)).ceilToDouble();
-                              final isCompleted = _isCompleted[index] ?? false;
-                              final reps = _reps[index] ?? repsForWeek[index];
-                              final weight = _weights[index] ?? initialWeight;
-                              print('Set: $oneRM');
-                              return DataRow(
-                                cells: [
-                                  DataCell(
-                                    Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Checkbox(
-                                          value: isCompleted,
-                                          onChanged: (bool? value) {
-                                            setState(() {
-                                              _isCompleted[index] =
-                                                  value ?? false;
-                                              if (value == true) {
-                                                _startSetTimer();
-                                              }
-                                            });
-                                          },
-                                        ),
-                                        Text(setName),
-                                      ],
-                                    ),
-                                  ),
-                                  DataCell(
-                                    Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        IconButton(
-                                          iconSize: 16.0,
-                                          icon: const Icon(Icons.remove),
-                                          onPressed: () {
-                                            setState(() {
-                                              _reps[index] =
-                                                  (reps > 0) ? reps - 1 : 0;
-                                            });
-                                          },
-                                        ),
-                                        Text('$reps'),
-                                        IconButton(
-                                          iconSize: 16.0,
-                                          icon: const Icon(Icons.add),
-                                          onPressed: () {
-                                            setState(() {
-                                              _reps[index] = reps + 1;
-                                            });
-                                          },
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  DataCell(
-                                    Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        GestureDetector(
-                                          onLongPress: () {
-                                            _showWeightDialog(index, weight, localizations);
-                                          },
-                                          child: IconButton(
-                                            iconSize: 16.0,
-                                            icon: const Icon(Icons.remove),
-                                            onPressed: () {
-                                              setState(() {
-                                                _weights[index] = (weight > 0)
-                                                    ? weight - 1
-                                                    : 0;
-                                              });
-                                            },
-                                          ),
-                                        ),
-                                        GestureDetector(
-                                          onLongPress: () {
-                                            _showWeightDialog(index, weight, localizations);
-                                          },
-                                          child: Text('$weight'),
-                                        ),
-                                        GestureDetector(
-                                          onLongPress: () {
-                                            _showWeightDialog(index, weight, localizations);
-                                          },
-                                          child: IconButton(
-                                            iconSize: 16.0,
-                                            icon: const Icon(Icons.add),
-                                            onPressed: () {
-                                              setState(() {
-                                                _weights[index] = weight + 1;
-                                              });
-                                            },
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              );
-                            },
-                          ),
-                        ),
-                      ),
+                      // Warmups above the working sets, FSL below them, each
+                      // with its own label so the three groups read apart.
+                      if (plan.warmupSets.isNotEmpty) ...[
+                        _buildGroupLabel(localizations.warmup),
+                        _buildSetsTable(plan.warmupSets, _warmupIndexBase,
+                            localizations, preferences.selectedUnit),
+                      ],
+                      _buildSetsTable(plan.mainSets, _mainIndexBase,
+                          localizations, preferences.selectedUnit),
+                      if (plan.fslSets.isNotEmpty) ...[
+                        _buildGroupLabel(localizations.fsl),
+                        _buildSetsTable(plan.fslSets, _fslIndexBase,
+                            localizations, preferences.selectedUnit),
+                      ],
                     ],
                   ),
                   _buildAccessorySection(localizations, workouts),
@@ -1098,7 +1229,7 @@ class _WorkoutPageState extends ConsumerState<WorkoutPage> {
             const SizedBox(height: 16),
             Center(
               child: ElevatedButton(
-                onPressed: _allSetsCompleted() || _anyAccessorySetFilled()
+                onPressed: _allSetsCompleted(plan) || _anyAccessorySetFilled()
                     ? () async {
                         // Capture the session cycle/week before _saveData
                         // advances them.
@@ -1107,14 +1238,13 @@ class _WorkoutPageState extends ConsumerState<WorkoutPage> {
                         // A partial main lift was never savable before, so
                         // skipping it keeps every reachable path intact and
                         // avoids saving an empty main-lift row.
-                        if (_allSetsCompleted()) {
+                        if (_allSetsCompleted(plan)) {
                           await _saveData(
                               week,
                               cycleWeekData['cycle'] ?? 1,
-                              oneRM,
                               tm,
                               widget.exercise,
-                              sets,
+                              plan,
                               (workout) => ref
                                   .read(workoutProvider.notifier)
                                   .addWorkout(workout),

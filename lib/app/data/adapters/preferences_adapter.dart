@@ -9,6 +9,10 @@ class PreferencesAdapter {
       percData: (map['percData'] as Map<String, dynamic>).map((key, value) => MapEntry(key, Map<String, double>.from(value as Map))),
       cycleWeekData: (map['cycleWeekData'] as Map<String, dynamic>).map((key, value) => MapEntry(key, Map<String, int>.from(value as Map))), // New field
       tmData: Map<String, double>.from(map['tmData'] ?? {}), // New field
+      // Older stored maps and exports carry neither key: warmups were always
+      // on before they became optional, and FSL was never offered at all.
+      warmupSetsEnabled: map['warmupSetsEnabled'] as bool? ?? true,
+      fslData: Map<String, bool>.from(map['fslData'] ?? {}),
     );
   }
 
@@ -20,6 +24,8 @@ class PreferencesAdapter {
       'percData': model.percData,
       'cycleWeekData': model.cycleWeekData, // New field
       'tmData': model.tmData, // New field
+      'warmupSetsEnabled': model.warmupSetsEnabled,
+      'fslData': model.fslData,
     };
   }
 }
