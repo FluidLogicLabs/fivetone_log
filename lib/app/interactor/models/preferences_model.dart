@@ -2,6 +2,31 @@ import 'package:flutter/foundation.dart';
 
 import '../../utils/training_defaults.dart';
 
+
+/// [mapEquals] compares values with ==, and two nested maps are only == when
+/// they are the same instance. That made a model unequal to its own round trip
+/// through a backup file, so nested maps are compared level by level here.
+bool _mapEqualsDeep(Map<dynamic, dynamic> a, Map<dynamic, dynamic> b) {
+  if (a.length != b.length) {
+    return false;
+  }
+  for (final key in a.keys) {
+    if (!b.containsKey(key)) {
+      return false;
+    }
+    final Object? left = a[key];
+    final Object? right = b[key];
+    if (left is Map && right is Map) {
+      if (!_mapEqualsDeep(left, right)) {
+        return false;
+      }
+    } else if (left != right) {
+      return false;
+    }
+  }
+  return true;
+}
+
 @immutable
 class PreferencesModel {
   final String selectedUnit;
@@ -68,8 +93,8 @@ class PreferencesModel {
           runtimeType == other.runtimeType &&
           selectedUnit == other.selectedUnit &&
           mapEquals(rmData, other.rmData) && // Changed to store 1RM values
-          mapEquals(percData, other.percData) &&
-          mapEquals(cycleWeekData, other.cycleWeekData) && // New field
+          _mapEqualsDeep(percData, other.percData) &&
+          _mapEqualsDeep(cycleWeekData, other.cycleWeekData) && // New field
           mapEquals(tmData, other.tmData) && // Add this line
           warmupSetsEnabled == other.warmupSetsEnabled &&
           mapEquals(fslData, other.fslData) &&
