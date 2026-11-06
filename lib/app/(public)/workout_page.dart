@@ -1098,7 +1098,11 @@ class _WorkoutPageState extends ConsumerState<WorkoutPage> {
     final workouts = ref.watch(workoutProvider);
     final localizations = AppLocalizations.of(context)!;
     final oneRM = preferences.rmData[widget.exercise] ?? 0.0;
-    final tm = preferences.tmData?[widget.exercise] ?? (oneRM * 0.9); // Use TM if available, else fallback
+    // A stored training max is what the cycles have advanced it to, so it
+    // wins. Only a lift with no stored max is derived from the 1RM, at the
+    // user's percentage.
+    final double tm = preferences.tmData[widget.exercise] ??
+        deriveTrainingMax(oneRM, preferences.tmPercent);
     final percData = preferences.percData;
     final cycleWeekData = preferences.cycleWeekData[widget.exercise] ??
         {'cycle': 1, 'week': 1}; 

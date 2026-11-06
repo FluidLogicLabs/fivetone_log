@@ -80,6 +80,48 @@ void main() {
     expect(PreferencesAdapter.fromMap(map).roundingStep, 1.0);
   });
 
+  test('the training max percentage defaults to 85 and survives storage', () {
+    expect(_emptyPreferences().tmPercent, 85.0);
+
+    final decoded = _throughStorage(_emptyPreferences().copyWith(tmPercent: 90));
+
+    expect(decoded.tmPercent, 90.0);
+    expect(decoded, _emptyPreferences().copyWith(tmPercent: 90));
+  });
+
+  test('a stored map written before the percentage existed still loads', () {
+    final map = <String, dynamic>{
+      'selectedUnit': 'kg',
+      'rmData': <String, double>{'Supino': 100.0},
+      'percData': <String, dynamic>{},
+      'cycleWeekData': <String, dynamic>{},
+      'tmData': <String, double>{'Supino': 90.0},
+      'warmupSetsEnabled': true,
+      'fslData': <String, bool>{},
+    };
+
+    final preferences = PreferencesAdapter.fromMap(map);
+
+    expect(preferences.tmPercent, 85.0);
+    expect(preferences.roundingStep, 1.0);
+    // The stored training max is what the cycles left behind, so it is kept
+    // exactly as it was written.
+    expect(preferences.tmData['Supino'], 90.0);
+  });
+
+  test('an out of range percentage in a stored map is refused', () {
+    final map = <String, dynamic>{
+      'selectedUnit': 'kg',
+      'rmData': <String, double>{},
+      'percData': <String, dynamic>{},
+      'cycleWeekData': <String, dynamic>{},
+      'tmData': <String, double>{},
+      'tmPercent': 140,
+    };
+
+    expect(PreferencesAdapter.fromMap(map).tmPercent, 85.0);
+  });
+
   test('FSL stays off for a lift that was never toggled', () {
     final decoded = _throughStorage(
       _emptyPreferences().copyWith(fslData: {'Supino': true}),

@@ -57,6 +57,7 @@ class PreferencesAdapter {
       warmupSetsEnabled: map['warmupSetsEnabled'] as bool? ?? true,
       fslData: Map<String, bool>.from(map['fslData'] ?? {}),
       roundingStep: sanitiseRoundingStep(_asDouble(map['roundingStep'])),
+      tmPercent: sanitiseTmPercent(_asDouble(map['tmPercent'])),
     );
   }
 
@@ -71,6 +72,7 @@ class PreferencesAdapter {
       'warmupSetsEnabled': model.warmupSetsEnabled,
       'fslData': model.fslData,
       'roundingStep': model.roundingStep,
+      'tmPercent': model.tmPercent,
     };
   }
 }

@@ -70,5 +70,12 @@
     "accessoryLastUsed": "Último uso",
     "accessoryNameHint": "Nome do exercício",
     "warmup": "Aquecimento",
-    "fsl": "FSL"
+    "fsl": "FSL",
+    "trainingSettings": "Configurações de treino",
+    "trainingMaxPercentage": "Porcentagem do peso máximo de treino",
+    "roundingStep": "Passo de arredondamento",
+    "saveSettings": "Salvar configurações",
+    "trainingMaxExplained": "O peso máximo de treino é esta porcentagem do seu 1RM. Ao salvar uma nova porcentagem, os exercícios cujo peso máximo ainda corresponde à anterior são recalculados, e os que já avançaram com um ciclo ficam como estão.",
+    "tmLeftAlone": "Peso máximo mantido para",
+    "settingsSaved": "Configurações salvas"
 }

@@ -70,5 +70,12 @@
     "accessoryLastUsed": "Last used",
     "accessoryNameHint": "Exercise name",
     "warmup": "Warmup",
-    "fsl": "FSL"
+    "fsl": "FSL",
+    "trainingSettings": "Training settings",
+    "trainingMaxPercentage": "Training max percentage",
+    "roundingStep": "Rounding step",
+    "saveSettings": "Save settings",
+    "trainingMaxExplained": "The training max is this percentage of your 1RM. Saving a new percentage recalculates the lifts whose training max still matches the old one, and leaves lifts a cycle has already advanced.",
+    "tmLeftAlone": "Training max kept for",
+    "settingsSaved": "Settings saved"
 }

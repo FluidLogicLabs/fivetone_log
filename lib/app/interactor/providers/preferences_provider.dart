@@ -68,6 +68,29 @@ class PreferencesNotifier extends StateNotifier<PreferencesModel> {
     state = updatedPreferences;
   }
 
+  // Change the training max percentage and bring the training maxes with it.
+  // Lifts whose stored training max no longer matches the old percentage are
+  // reported back rather than overwritten: that mismatch is what a finished
+  // cycle looks like, and dropping it silently would undo the progression.
+  Future<TrainingMaxRecalculation> updateTmPercent(double percent) async {
+    final double sanitised = sanitiseTmPercent(percent);
+    final TrainingMaxRecalculation plan = planTrainingMaxRecalculation(
+      rmData: state.rmData,
+      tmData: state.tmData,
+      oldPercent: state.tmPercent,
+      newPercent: sanitised,
+    );
+    final Map<String, double> updatedTmData =
+        Map<String, double>.from(state.tmData)..addAll(plan.updated);
+    final updatedPreferences = state.copyWith(
+      tmPercent: sanitised,
+      tmData: updatedTmData,
+    );
+    await _repository.update(updatedPreferences);
+    state = updatedPreferences;
+    return plan;
+  }
+
   // Show or hide the warmup ladder for every session
   Future<void> updateWarmupSetsEnabled(bool enabled) async {
     final updatedPreferences = state.copyWith(warmupSetsEnabled: enabled);

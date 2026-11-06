@@ -16,6 +16,8 @@ class PreferencesModel {
   // The weight rounding step, in the selected unit. Every calculated weight
   // rounds up to the next multiple of it. One kilo is the old behaviour.
   final double roundingStep;
+  // The training max as a whole percentage of the 1RM: 85 means 85%.
+  final double tmPercent;
 
   const PreferencesModel({
     required this.selectedUnit,
@@ -26,6 +28,7 @@ class PreferencesModel {
     this.warmupSetsEnabled = true,
     this.fslData = const {},
     this.roundingStep = defaultRoundingStep,
+    this.tmPercent = defaultTmPercent,
   });
 
   PreferencesModel copyWith({
@@ -37,6 +40,7 @@ class PreferencesModel {
     bool? warmupSetsEnabled,
     Map<String, bool>? fslData,
     double? roundingStep,
+    double? tmPercent,
   }) {
     return PreferencesModel(
       selectedUnit: selectedUnit ?? this.selectedUnit,
@@ -47,6 +51,7 @@ class PreferencesModel {
       warmupSetsEnabled: warmupSetsEnabled ?? this.warmupSetsEnabled,
       fslData: fslData ?? this.fslData,
       roundingStep: roundingStep ?? this.roundingStep,
+      tmPercent: tmPercent ?? this.tmPercent,
     );
   }
 
@@ -62,9 +67,10 @@ class PreferencesModel {
           mapEquals(tmData, other.tmData) && // Add this line
           warmupSetsEnabled == other.warmupSetsEnabled &&
           mapEquals(fslData, other.fslData) &&
-          roundingStep == other.roundingStep;
+          roundingStep == other.roundingStep &&
+          tmPercent == other.tmPercent;
 
   @override
   int get hashCode =>
-      selectedUnit.hashCode ^ rmData.hashCode ^ percData.hashCode ^ cycleWeekData.hashCode ^ tmData.hashCode ^ warmupSetsEnabled.hashCode ^ fslData.hashCode ^ roundingStep.hashCode; // Add tmData to hashCode
+      selectedUnit.hashCode ^ rmData.hashCode ^ percData.hashCode ^ cycleWeekData.hashCode ^ tmData.hashCode ^ warmupSetsEnabled.hashCode ^ fslData.hashCode ^ roundingStep.hashCode ^ tmPercent.hashCode; // Add tmData to hashCode
 }

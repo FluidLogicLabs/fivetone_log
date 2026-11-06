@@ -5,6 +5,7 @@ import 'package:routefly/routefly.dart';
 import 'package:fivethreeone_log/app/interactor/models/preferences_model.dart';
 import 'package:fivethreeone_log/app/interactor/providers/preferences_provider.dart';
 import 'package:fivethreeone_log/app/widgets/default_option_button.dart';
+import 'package:fivethreeone_log/app/utils/training_defaults.dart'; // Rounding step and training max percentage
 import 'package:fivethreeone_log/app/utils/utils.dart'; // Import the utility functions
 import 'package:flutter_gen/gen_l10n/app_localizations.dart'; // Import localization
 
@@ -47,6 +48,64 @@ class InitialFormState extends ConsumerState<InitialForm> {
       'Série 3': 60,
     },
   };
+
+  // The two settings that decide how every derived weight reads. They are
+  // seeded from what is stored so reopening the screen never invents a value.
+  late final TextEditingController _tmPercentController;
+  late final TextEditingController _roundingStepController;
+
+  @override
+  void initState() {
+    super.initState();
+    final preferences = ref.read(preferencesProvider);
+    _tmPercentController =
+        TextEditingController(text: formatTmPercent(preferences.tmPercent));
+    _roundingStepController = TextEditingController(
+        text: formatRoundingStep(preferences.roundingStep));
+  }
+
+  @override
+  void dispose() {
+    _tmPercentController.dispose();
+    _roundingStepController.dispose();
+    super.dispose();
+  }
+
+  // A typed number, with a comma accepted because a numeric keyboard on a
+  // Brazilian device offers one.
+  double? _typedNumber(String text) =>
+      double.tryParse(text.trim().replaceAll(',', '.'));
+
+  Future<void> _saveSettings(AppLocalizations localizations) async {
+    final notifier = ref.read(preferencesProvider.notifier);
+    final current = notifier.getPreferences();
+    final double typedStep =
+        _typedNumber(_roundingStepController.text) ?? current.roundingStep;
+    final double typedPercent =
+        _typedNumber(_tmPercentController.text) ?? current.tmPercent;
+
+    await notifier.updateRoundingStep(typedStep);
+    final TrainingMaxRecalculation plan =
+        await notifier.updateTmPercent(typedPercent);
+
+    if (!mounted) {
+      return;
+    }
+    // Show what was actually stored, which is not what was typed when the
+    // value was out of range and had to fall back.
+    final saved = ref.read(preferencesProvider);
+    setState(() {
+      _roundingStepController.text = formatRoundingStep(saved.roundingStep);
+      _tmPercentController.text = formatTmPercent(saved.tmPercent);
+    });
+    final String keptNote = plan.kept.isEmpty
+        ? ''
+        : ' · ${localizations.tmLeftAlone}: '
+            '${plan.kept.map((exercise) => getExerciseName(exercise, localizations)).join(', ')}';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('${localizations.settingsSaved}$keptNote')),
+    );
+  }
 
   String getWeekName(String week, AppLocalizations localizations) {
     switch (week) {
@@ -265,6 +324,71 @@ class InitialFormState extends ConsumerState<InitialForm> {
               ],
             ),
             const SizedBox(height: 16),
+            ExpansionTile(
+              maintainState: true,
+              title: Text(localizations.trainingSettings),
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8.0),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                          child: TextFormField(
+                            controller: _tmPercentController,
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [
+                              LengthLimitingTextInputFormatter(5),
+                            ],
+                            decoration: InputDecoration(
+                              labelText: localizations.trainingMaxPercentage,
+                              border: const OutlineInputBorder(),
+                              suffix: const Text('%'),
+                            ),
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                          child: TextFormField(
+                            controller: _roundingStepController,
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [
+                              LengthLimitingTextInputFormatter(5),
+                            ],
+                            decoration: InputDecoration(
+                              labelText: localizations.roundingStep,
+                              border: const OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  child: Text(
+                    localizations.trainingMaxExplained,
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ),
+                Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed: () => _saveSettings(localizations),
+                      child: Text(localizations.saveSettings),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
               child: SizedBox(
@@ -280,12 +404,22 @@ class InitialFormState extends ConsumerState<InitialForm> {
                     if (_formKey.currentState!.validate()) {
                       // If the form is valid, display a snackbar. In the real world,
                       final Map<String, double> rmData = {
-                        for (var exercise in _rmData.keys) 
-                          exercise: calculate1RM(_rmData[exercise]!['peso']!, _rmData[exercise]!['repeticoes']!.toInt())
+                        for (var exercise in _rmData.keys)
+                          exercise: oneRMFromEntry(
+                              _rmData[exercise]!['peso']!,
+                              _rmData[exercise]!['repeticoes']!.toInt())
                       };
+                      // The training max comes from the stored percentage,
+                      // never from a number written into this screen.
+                      final double tmPercent =
+                          ref.read(preferencesProvider).tmPercent;
                       final Map<String, double> tmData = {
                         for (var exercise in _rmData.keys)
-                          exercise: calculate1RM(_rmData[exercise]!['peso']!, _rmData[exercise]!['repeticoes']!.toInt()) * 0.9
+                          exercise: deriveTrainingMax(
+                              oneRMFromEntry(
+                                  _rmData[exercise]!['peso']!,
+                                  _rmData[exercise]!['repeticoes']!.toInt()),
+                              tmPercent)
                       };
                       final Map<String, Map<String, int>> cycleWeekData = {
                         for (var exercise in _rmData.keys) exercise: {'cycle': 1, 'week': 1}
