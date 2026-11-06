@@ -186,7 +186,7 @@ void main() {
       expect(plan.all.length, 3);
     });
 
-    test('the deload week gets its own warmups above the 40/50/60 sets', () {
+    test('the deload week does not stack the ladder on the 40/50/60 sets', () {
       final plan = buildSessionPlan(
         trainingMax: 100,
         weekPercentages: [40, 50, 60],
@@ -195,8 +195,11 @@ void main() {
         includeFsl: false,
       );
 
+      // Decided 6 Nov: the ladder is suppressed on the deload week, so the
+      // session is the three working sets only.
+      expect(plan.warmupSets, isEmpty);
       expect(plan.all.map((set) => set.percentage).toList(),
-          [40.0, 50.0, 60.0, 40.0, 50.0, 60.0]);
+          [40.0, 50.0, 60.0]);
     });
   });
 
