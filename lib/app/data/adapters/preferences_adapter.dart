@@ -58,6 +58,11 @@ class PreferencesAdapter {
       fslData: Map<String, bool>.from(map['fslData'] ?? {}),
       roundingStep: sanitiseRoundingStep(_asDouble(map['roundingStep'])),
       tmPercent: sanitiseTmPercent(_asDouble(map['tmPercent'])),
+      // No stored map means the map was written before increments were a
+      // preference, so the standard defaults apply.
+      cycleIncrement: map['cycleIncrement'] == null
+          ? defaultCycleIncrement
+          : _doubleMap(map['cycleIncrement']),
     );
   }
 
@@ -73,6 +78,7 @@ class PreferencesAdapter {
       'fslData': model.fslData,
       'roundingStep': model.roundingStep,
       'tmPercent': model.tmPercent,
+      'cycleIncrement': model.cycleIncrement,
     };
   }
 }

@@ -148,3 +148,30 @@ TrainingMaxRecalculation planTrainingMaxRecalculation({
 
   return TrainingMaxRecalculation(updated: updated, kept: kept);
 }
+
+/// How much the training max goes up when a cycle completes, per lift. The
+/// lower body lifts move twice as fast as the upper body ones, which is the
+/// 5/3/1 convention and what the app hardcoded before this was a preference.
+const Map<String, double> defaultCycleIncrement = <String, double>{
+  'Supino': 5.0,
+  'Press militar': 5.0,
+  'Agachamento': 10.0,
+  'Levantamento terra': 10.0,
+};
+
+/// What a lift that is in neither the stored map nor the defaults gets. Five
+/// is the smallest of the standard increments, so an unknown lift is never
+/// handed a jump it did not earn.
+const double fallbackCycleIncrement = 5.0;
+
+/// The increment for [exercise]: the stored value first, then the default for
+/// that lift, then [fallbackCycleIncrement]. A stored zero or negative is
+/// refused, because a cycle that adds nothing or takes weight away is not a
+/// cycle.
+double cycleIncrementFor(String exercise, Map<String, double> increments) {
+  final double? stored = increments[exercise];
+  if (stored != null && !stored.isNaN && stored.isFinite && stored > 0) {
+    return stored;
+  }
+  return defaultCycleIncrement[exercise] ?? fallbackCycleIncrement;
+}

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fivethreeone_log/app/data/adapters/preferences_adapter.dart';
 import 'package:fivethreeone_log/app/interactor/models/preferences_model.dart';
+import 'package:fivethreeone_log/app/utils/training_defaults.dart';
 
 /// Round trips through JSON, which is exactly how the repository stores
 /// preferences and how an export file carries them.
@@ -120,6 +121,45 @@ void main() {
     };
 
     expect(PreferencesAdapter.fromMap(map).tmPercent, 85.0);
+  });
+
+  test('the cycle increments default to the standard map and round trip', () {
+    expect(_emptyPreferences().cycleIncrement, defaultCycleIncrement);
+
+    final custom = _emptyPreferences().copyWith(
+        cycleIncrement: {'Supino': 2.5, 'Agachamento': 12.5});
+    final decoded = _throughStorage(custom);
+
+    expect(decoded.cycleIncrement, {'Supino': 2.5, 'Agachamento': 12.5});
+    expect(decoded, custom);
+  });
+
+  test('a stored map without increments falls back to the defaults', () {
+    final map = <String, dynamic>{
+      'selectedUnit': 'kg',
+      'rmData': <String, double>{},
+      'percData': <String, dynamic>{},
+      'cycleWeekData': <String, dynamic>{},
+      'tmData': <String, double>{},
+    };
+
+    expect(PreferencesAdapter.fromMap(map).cycleIncrement, defaultCycleIncrement);
+  });
+
+  test('increments written as whole numbers by hand still load', () {
+    final map = <String, dynamic>{
+      'selectedUnit': 'kg',
+      'rmData': <String, double>{},
+      'percData': <String, dynamic>{},
+      'cycleWeekData': <String, dynamic>{},
+      'tmData': <String, double>{},
+      'cycleIncrement': <String, dynamic>{'Supino': 5, 'Agachamento': 10},
+    };
+
+    final decoded = PreferencesAdapter.fromMap(map);
+
+    expect(decoded.cycleIncrement['Supino'], 5.0);
+    expect(decoded.cycleIncrement['Agachamento'], 10.0);
   });
 
   test('FSL stays off for a lift that was never toggled', () {

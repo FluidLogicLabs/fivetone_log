@@ -317,6 +317,7 @@ class _WorkoutPageState extends ConsumerState<WorkoutPage> {
       int week,
       int cycle,
       double actualTM,
+      double cycleIncrement,
       String exercise,
       SessionPlan plan,
       Function(WorkoutModel) onSave,
@@ -383,12 +384,9 @@ class _WorkoutPageState extends ConsumerState<WorkoutPage> {
       newCycle += 1;
 
       // Update 1RM
-      double increment =
-          (exercise == 'Levantamento terra' || exercise == 'Agachamento')
-              ? 5.0
-              : 2.5;
-      print('$exercise: $increment');
-      final newTM = actualTM + increment;
+      // The increment is a per lift preference now, with the standard
+      // defaults behind it for a lift that has none stored.
+      final newTM = actualTM + cycleIncrement;
       await updateTM(exercise, newTM);
     }
 
@@ -1251,6 +1249,8 @@ class _WorkoutPageState extends ConsumerState<WorkoutPage> {
                               week,
                               cycleWeekData['cycle'] ?? 1,
                               tm,
+                              cycleIncrementFor(widget.exercise,
+                                  preferences.cycleIncrement),
                               widget.exercise,
                               plan,
                               (workout) => ref

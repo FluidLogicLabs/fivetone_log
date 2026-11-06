@@ -91,6 +91,16 @@ class PreferencesNotifier extends StateNotifier<PreferencesModel> {
     return plan;
   }
 
+  // How much one lift's training max goes up when a cycle finishes.
+  Future<void> updateCycleIncrement(String exercise, double increment) async {
+    final updatedIncrements =
+        Map<String, double>.from(state.cycleIncrement)..[exercise] = increment;
+    final updatedPreferences =
+        state.copyWith(cycleIncrement: updatedIncrements);
+    await _repository.update(updatedPreferences);
+    state = updatedPreferences;
+  }
+
   // Show or hide the warmup ladder for every session
   Future<void> updateWarmupSetsEnabled(bool enabled) async {
     final updatedPreferences = state.copyWith(warmupSetsEnabled: enabled);
