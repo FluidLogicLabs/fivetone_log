@@ -348,12 +348,18 @@ void main() {
       (tester) async {
     final page = await _openEditPage(tester, [_fullSession(), _accessoryWorkout()]);
 
+    // The accessory section sits below eleven rows, and the page's ListView
+    // only builds what is in the viewport, so it has to be scrolled to first.
+    await tester.scrollUntilVisible(
+      find.text('Triceps'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
     final accessoryTile =
         find.ancestor(of: find.text('Triceps'), matching: find.byType(ExpansionTile));
     expect(accessoryTile, findsOneWidget);
-
-    await tester.ensureVisible(find.text('Triceps'));
-    await tester.pumpAndSettle();
     await tester.tap(find.text('Triceps'));
     await tester.pumpAndSettle();
 
